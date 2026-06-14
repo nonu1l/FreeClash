@@ -710,8 +710,8 @@ p {
 
 .channels-row {
   grid-template-columns:
-    minmax(150px, 0.9fr) minmax(160px, 1fr) minmax(260px, 1.35fr)
-    minmax(140px, 0.85fr) minmax(140px, 0.85fr) 74px minmax(230px, auto);
+    minmax(150px, 0.9fr) minmax(170px, 1fr) minmax(280px, 1.45fr)
+    minmax(150px, 0.8fr) minmax(110px, 0.62fr) 74px minmax(180px, auto);
 }
 
 .rules-row:first-child {
@@ -785,6 +785,16 @@ p {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.speed-pair {
+  display: grid;
+  gap: var(--fc-space-1);
+}
+
+.speed-pair strong {
+  font-size: 13px;
+  line-height: 17px;
 }
 
 .mode {

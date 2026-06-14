@@ -3,12 +3,10 @@ import { computed, ref } from "vue";
 import {
   Copy,
   Edit3,
-  Gauge,
   Plus,
   Route,
   Server,
   Stethoscope,
-  TestTube,
   Trash2,
 } from "@lucide/vue";
 import RuleDialog from "../components/dialogs/RuleDialog.vue";
@@ -21,20 +19,18 @@ import type {
   NodeInfo,
   ProxyChannel,
 } from "../types";
-import { formatBytes, formatSpeed, networkModeLabel } from "../utils/format";
+import { formatBytes, formatSpeed } from "../utils/format";
 
 const props = defineProps<{
   channels: ProxyChannel[];
   nodes: NodeInfo[];
   stats: ChannelStats[];
-  globalProxyEnabled: boolean;
   busy: string | null;
   createChannel: (input: ChannelInput) => Promise<void>;
   updateChannel: (id: string, input: ChannelInput) => Promise<void>;
   deleteChannel: (id: string) => Promise<void>;
   duplicateChannel: (id: string) => Promise<void>;
   setChannelEnabled: (id: string, enabled: boolean) => Promise<void>;
-  testNode: (channelId: string, node: string) => Promise<void>;
   diagnoseChannel: (id: string) => Promise<ChannelDiagnostics>;
   testChannelProxy: (id: string) => Promise<ChannelProxyTestResult>;
 }>();
@@ -44,7 +40,6 @@ const editing = ref<ProxyChannel | null>(null);
 const diagnosticsOpen = ref(false);
 const diagnostics = ref<ChannelDiagnostics | null>(null);
 const diagnosticsTest = ref<ChannelProxyTestResult | null>(null);
-const rowTests = ref<Record<string, ChannelProxyTestResult>>({});
 const selectedChannelId = ref<string | null>(null);
 
 const statsByChannel = computed(() => {
@@ -61,29 +56,12 @@ function selectedNode(channel: ProxyChannel) {
   return channel.selected_node || "DIRECT";
 }
 
-function effectiveMode(channel: ProxyChannel) {
-  return props.globalProxyEnabled && channel.enabled && selectedNode(channel) !== "DIRECT"
-    ? "Proxy"
-    : "Direct";
-}
-
 function httpUrl(channel: ProxyChannel) {
   return `http://127.0.0.1:${channel.http_port}`;
 }
 
 function socksUrl(channel: ProxyChannel) {
   return `socks5://127.0.0.1:${channel.socks_port}`;
-}
-
-function passedCount(result: ChannelProxyTestResult) {
-  return result.entries.reduce(
-    (sum, entry) => sum + entry.tests.filter((item) => item.success).length,
-    0,
-  );
-}
-
-function summaryIp(result: ChannelProxyTestResult) {
-  return result.entries.map((entry) => entry.ip).find(Boolean) || "-";
 }
 
 function openCreate() {
@@ -121,12 +99,6 @@ async function runDiagnosticsTest() {
   const channelId = diagnostics.value.channel_id;
   diagnosticsTest.value = await props.testChannelProxy(channelId);
   diagnostics.value = await props.diagnoseChannel(channelId);
-}
-
-async function quickTest(channel: ProxyChannel) {
-  selectedChannelId.value = channel.id;
-  const result = await props.testChannelProxy(channel.id);
-  rowTests.value = { ...rowTests.value, [channel.id]: result };
 }
 
 function onToggleChannel(channel: ProxyChannel, event: Event) {
@@ -186,21 +158,10 @@ function selectChannel(channel: ProxyChannel) {
       >
         <div class="rule-name-cell">
           <strong :title="channel.name">{{ channel.name }}</strong>
-          <span :class="effectiveMode(channel) === 'Proxy' ? 'mode proxy' : 'mode direct'">
-            {{ networkModeLabel(effectiveMode(channel)) }}
-          </span>
-          <small v-if="rowTests[channel.id]" :class="{ failed: !rowTests[channel.id].success }">
-            {{
-              rowTests[channel.id].success
-                ? `IP ${summaryIp(rowTests[channel.id])} · ${passedCount(rowTests[channel.id])} 项通过`
-                : rowTests[channel.id].error || "测试失败"
-            }}
-          </small>
         </div>
 
         <div class="node-cell">
           <strong :title="selectedNode(channel)">{{ selectedNode(channel) }}</strong>
-          <span>{{ effectiveMode(channel) === "Proxy" ? "节点模式" : "DIRECT" }}</span>
         </div>
 
         <div class="proxy-addresses">
@@ -215,19 +176,14 @@ function selectChannel(channel: ProxyChannel) {
         </div>
 
         <div>
-          <strong>{{ formatSpeed((statFor(channel)?.upload_speed ?? 0) + (statFor(channel)?.download_speed ?? 0)) }}</strong>
-          <span class="muted">
-            ↑ {{ formatSpeed(statFor(channel)?.upload_speed ?? 0) }} ·
-            ↓ {{ formatSpeed(statFor(channel)?.download_speed ?? 0) }}
+          <span class="speed-pair">
+            <strong>↑ {{ formatSpeed(statFor(channel)?.upload_speed ?? 0) }}</strong>
+            <strong>↓ {{ formatSpeed(statFor(channel)?.download_speed ?? 0) }}</strong>
           </span>
         </div>
 
         <div>
           <strong>{{ formatBytes((statFor(channel)?.upload_total ?? 0) + (statFor(channel)?.download_total ?? 0)) }}</strong>
-          <span class="muted">
-            ↑ {{ formatBytes(statFor(channel)?.upload_total ?? 0) }} ·
-            ↓ {{ formatBytes(statFor(channel)?.download_total ?? 0) }}
-          </span>
         </div>
 
         <div>
@@ -243,22 +199,6 @@ function selectChannel(channel: ProxyChannel) {
         </div>
 
         <div class="row-actions">
-          <button
-            type="button"
-            title="测速节点"
-            :disabled="busy === `delay-${channel.id}`"
-            @click.stop="testNode(channel.id, selectedNode(channel))"
-          >
-            <Gauge :size="16" />
-          </button>
-          <button
-            type="button"
-            title="测试连接"
-            :disabled="busy === `test-channel-${channel.id}`"
-            @click.stop="quickTest(channel)"
-          >
-            <TestTube :size="16" />
-          </button>
           <button type="button" title="诊断" @click.stop="openDiagnostics(channel)">
             <Stethoscope :size="16" />
           </button>

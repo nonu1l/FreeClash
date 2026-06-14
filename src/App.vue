@@ -26,7 +26,6 @@ const subscriptions = computed(() => snapshot.value?.config.subscriptions ?? [])
 const channels = computed(() => snapshot.value?.config.channels ?? []);
 const nodes = computed(() => snapshot.value?.nodes ?? []);
 const stats = computed(() => snapshot.value?.stats ?? []);
-const globalProxyEnabled = computed(() => snapshot.value?.config.global_proxy_enabled ?? true);
 
 function setError(value: unknown) {
   error.value = value instanceof Error ? value.message : String(value);
@@ -108,10 +107,6 @@ async function duplicateChannel(id: string) {
 
 async function setChannelEnabled(id: string, enabled: boolean) {
   await runAction(`channel-enabled-${id}`, () => freeClashApi.setChannelEnabled(id, enabled));
-}
-
-async function testNode(channelId: string, node: string) {
-  await runAction(`delay-${channelId}`, () => freeClashApi.testNodeDelay(node));
 }
 
 async function diagnoseChannel(id: string) {
@@ -213,14 +208,12 @@ onBeforeUnmount(() => {
         :channels="channels"
         :nodes="nodes"
         :stats="stats"
-        :global-proxy-enabled="globalProxyEnabled"
         :busy="busy"
         :create-channel="createChannel"
         :update-channel="updateChannel"
         :delete-channel="deleteChannel"
         :duplicate-channel="duplicateChannel"
         :set-channel-enabled="setChannelEnabled"
-        :test-node="testNode"
         :diagnose-channel="diagnoseChannel"
         :test-channel-proxy="testChannelProxy"
       />
