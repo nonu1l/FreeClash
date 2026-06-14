@@ -286,10 +286,10 @@ p {
 }
 
 .side-nav button {
-  gap: 10px;
+  gap: 14px;
   justify-content: flex-start;
   min-height: 40px;
-  padding: 0 12px;
+  padding: 0 12px 0 18px;
   color: #4f6073;
   font-size: 15px;
   font-weight: 550;
