@@ -13,8 +13,9 @@
   --fc-text-subtle: #8792a2;
   --fc-text-inverse: #ffffff;
   --fc-rail-text: #4f6073;
-  --fc-rail-active: #0f4c45;
-  --fc-rail-hover: #e7eef2;
+  --fc-rail-active: #0d453f;
+  --fc-rail-hover-bg: #dbe9e6;
+  --fc-rail-active-bg: #c8dfda;
   --fc-brand: #176b63;
   --fc-brand-hover: #125950;
   --fc-brand-active: #0d453f;
@@ -311,17 +312,17 @@ p {
 .side-nav button.active {
   color: var(--fc-rail-active);
   border-color: transparent;
-  background: var(--fc-brand-soft);
+  background: var(--fc-rail-active-bg);
 }
 
 .side-nav button:hover:not(:disabled) {
   color: var(--fc-rail-active);
   border-color: transparent;
-  background: var(--fc-rail-hover);
+  background: var(--fc-rail-hover-bg);
 }
 
 .side-nav button.active:hover:not(:disabled) {
-  background: var(--fc-brand-soft);
+  background: var(--fc-rail-active-bg);
 }
 
 .status-pane {
