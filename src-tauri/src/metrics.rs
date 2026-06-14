@@ -4,7 +4,7 @@ use std::time::Instant;
 use chrono::Utc;
 use uuid::Uuid;
 
-use crate::models::{RuleConnection, RuleStats};
+use crate::models::{ChannelConnection, ChannelStats};
 
 #[derive(Debug)]
 struct ConnectionMetric {
@@ -17,8 +17,8 @@ struct ConnectionMetric {
 }
 
 #[derive(Debug)]
-pub struct RuleMetrics {
-    rule_id: String,
+pub struct ChannelMetrics {
+    channel_id: String,
     upload_total: u64,
     download_total: u64,
     last_upload_total: u64,
@@ -36,10 +36,10 @@ pub enum TrafficDirection {
     Download,
 }
 
-impl RuleMetrics {
-    pub fn new(rule_id: impl Into<String>) -> Self {
+impl ChannelMetrics {
+    pub fn new(channel_id: impl Into<String>) -> Self {
         Self {
-            rule_id: rule_id.into(),
+            channel_id: channel_id.into(),
             upload_total: 0,
             download_total: 0,
             last_upload_total: 0,
@@ -97,7 +97,7 @@ impl RuleMetrics {
         self.trim_old_connections();
     }
 
-    pub fn snapshot(&mut self) -> RuleStats {
+    pub fn snapshot(&mut self) -> ChannelStats {
         let elapsed = self.last_sample.elapsed().as_secs_f64();
         if elapsed >= 0.5 {
             self.upload_speed = (self.upload_total - self.last_upload_total) as f64 / elapsed;
@@ -112,7 +112,7 @@ impl RuleMetrics {
             .order
             .iter()
             .filter_map(|id| {
-                self.connections.get(id).map(|conn| RuleConnection {
+                self.connections.get(id).map(|conn| ChannelConnection {
                     id: id.clone(),
                     target: conn.target.clone(),
                     method: conn.method.clone(),
@@ -125,8 +125,8 @@ impl RuleMetrics {
             .take(30)
             .collect();
 
-        RuleStats {
-            rule_id: self.rule_id.clone(),
+        ChannelStats {
+            channel_id: self.channel_id.clone(),
             upload_total: self.upload_total,
             download_total: self.download_total,
             upload_speed: self.upload_speed,
@@ -157,4 +157,3 @@ impl RuleMetrics {
         }
     }
 }
-

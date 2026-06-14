@@ -1,32 +1,34 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::{Arc, Mutex as StdMutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context, Result};
 use reqwest::Client;
 use serde_json::Value;
 use tauri::{AppHandle, Manager};
 use tokio::process::{Child, Command};
-use tokio::sync::Mutex;
+use tokio::sync::{oneshot, Mutex};
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use uuid::Uuid;
 
-use crate::metrics::RuleMetrics;
-use crate::mihomo::{group_name, render_config};
+use crate::metrics::ChannelMetrics;
+use crate::mihomo::{group_name, provider_name, render_config};
 use crate::models::{
-    AppConfig, AppRule, AppSnapshot, DelayResult, NodeInfo, RuleInput, RuleStats, RuntimeStatus,
+    AppConfig, AppSnapshot, ChannelDiagnostics, ChannelInput, ChannelProxyTestResult, ChannelStats,
+    DelayResult, NodeInfo, ProxyChannel, ProxyEndpointResult, ProxyProtocolTestResult,
+    RuntimeStatus, Subscription, SubscriptionInput,
 };
-use crate::proxy::start_meter_proxy;
+use crate::proxy::{start_meter_proxy, MeterProtocol};
 
 #[derive(Clone)]
 pub struct AppManager {
     paths: Arc<AppPaths>,
     inner: Arc<Mutex<InnerState>>,
-    client: Client,
+    local_client: Client,
 }
 
 #[derive(Debug)]
@@ -41,17 +43,21 @@ struct InnerState {
     config: AppConfig,
     core: Option<Child>,
     meter_tasks: HashMap<String, JoinHandle<()>>,
-    metrics: HashMap<String, Arc<StdMutex<RuleMetrics>>>,
-    launched_apps: HashMap<String, std::process::Child>,
+    http_shutdown: Option<oneshot::Sender<()>>,
+    metrics: HashMap<String, Arc<StdMutex<ChannelMetrics>>>,
     nodes: Vec<NodeInfo>,
     core_version: Option<String>,
     status_message: Option<String>,
+    last_errors: HashMap<String, String>,
 }
 
 impl Drop for InnerState {
     fn drop(&mut self) {
         for (_, task) in self.meter_tasks.drain() {
             task.abort();
+        }
+        if let Some(shutdown) = self.http_shutdown.take() {
+            let _ = shutdown.send(());
         }
         if let Some(mut child) = self.core.take() {
             let _ = child.start_kill();
@@ -85,14 +91,25 @@ impl AppManager {
                 config,
                 core: None,
                 meter_tasks: HashMap::new(),
+                http_shutdown: None,
                 metrics: HashMap::new(),
-                launched_apps: HashMap::new(),
                 nodes: vec![direct_node()],
                 core_version: None,
                 status_message: None,
+                last_errors: HashMap::new(),
             })),
-            client: Client::builder().timeout(Duration::from_secs(12)).build()?,
+            local_client: Client::builder()
+                .no_proxy()
+                .timeout(Duration::from_secs(12))
+                .build()?,
         })
+    }
+
+    pub fn global_proxy_enabled_blocking(&self) -> bool {
+        self.inner
+            .try_lock()
+            .map(|inner| inner.config.global_proxy_enabled)
+            .unwrap_or(true)
     }
 
     pub async fn initialize(&self) {
@@ -102,8 +119,19 @@ impl AppManager {
         }
     }
 
+    pub async fn shutdown(&self) {
+        self.stop_http_api_server().await;
+        self.stop_core_and_meters().await;
+    }
+
+    pub async fn start_http_api_from_config(&self) {
+        if let Err(err) = self.apply_http_api_runtime().await {
+            let mut inner = self.inner.lock().await;
+            inner.status_message = Some(format!("HTTP API 启动失败：{err:#}"));
+        }
+    }
+
     pub async fn get_state(&self) -> Result<AppSnapshot> {
-        self.reap_finished_apps().await;
         let mut inner = self.inner.lock().await;
         reap_core_status(&mut inner)?;
         let stats = collect_stats(&mut inner);
@@ -120,77 +148,71 @@ impl AppManager {
     pub async fn set_subscription(&self, url: Option<String>) -> Result<()> {
         {
             let mut inner = self.inner.lock().await;
-            inner.config.subscription_url = url.filter(|value| !value.trim().is_empty());
+            inner.config.subscription_url = None;
+            match url
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+            {
+                Some(url) => {
+                    if let Some(subscription) = inner.config.subscriptions.first_mut() {
+                        subscription.url = url;
+                        subscription.enabled = true;
+                        if subscription.name.trim().is_empty() {
+                            subscription.name = "默认订阅".to_string();
+                        }
+                    } else {
+                        inner.config.subscriptions.push(Subscription {
+                            id: "default".to_string(),
+                            name: "默认订阅".to_string(),
+                            url,
+                            enabled: true,
+                        });
+                    }
+                }
+                None => inner.config.subscriptions.clear(),
+            }
             save_config(&self.paths.app_config_path, &inner.config)?;
         }
         self.apply_runtime().await
     }
 
-    pub async fn refresh_nodes(&self) -> Result<Vec<NodeInfo>> {
-        self.ensure_core_running().await?;
-        let should_refresh = {
-            let inner = self.inner.lock().await;
-            inner.config.subscription_url.is_some()
-        };
-        if should_refresh {
-            let _ = self
-                .mihomo_request(reqwest::Method::PUT, "/providers/proxies/FreeClash", None)
-                .await;
-        }
-        let nodes = self.fetch_nodes().await?;
-        let mut inner = self.inner.lock().await;
-        inner.nodes = nodes.clone();
-        Ok(nodes)
-    }
-
-    pub async fn create_rule(&self, input: RuleInput) -> Result<AppRule> {
-        validate_rule_input(&input)?;
-        let rule = {
+    pub async fn create_subscription(&self, input: SubscriptionInput) -> Result<Subscription> {
+        validate_subscription_input(&input)?;
+        let subscription = {
             let mut inner = self.inner.lock().await;
-            let meter_port = allocate_port(&inner.config, None);
-            let mihomo_port = allocate_port(&inner.config, Some(meter_port));
-            let rule = AppRule {
+            let subscription = Subscription {
                 id: short_id(),
                 name: input.name.trim().to_string(),
-                app_path: input.app_path.trim().to_string(),
-                args: input.args.trim().to_string(),
-                working_dir: input.working_dir.trim().to_string(),
-                selected_node: normalize_node(input.selected_node),
+                url: input.url.trim().to_string(),
                 enabled: input.enabled,
-                meter_port,
-                mihomo_port,
             };
-            inner.config.rules.push(rule.clone());
+            inner.config.subscriptions.push(subscription.clone());
+            inner.config.subscription_url = None;
             save_config(&self.paths.app_config_path, &inner.config)?;
-            rule
+            subscription
         };
         self.apply_runtime().await?;
-        Ok(rule)
+        Ok(subscription)
     }
 
-    pub async fn update_rule(&self, rule_id: &str, input: RuleInput) -> Result<AppRule> {
-        validate_rule_input(&input)?;
+    pub async fn update_subscription(
+        &self,
+        subscription_id: &str,
+        input: SubscriptionInput,
+    ) -> Result<Subscription> {
+        validate_subscription_input(&input)?;
         let updated = {
             let mut inner = self.inner.lock().await;
-            let index = inner
+            let subscription = inner
                 .config
-                .rules
-                .iter()
-                .position(|rule| rule.id == rule_id)
-                .ok_or_else(|| anyhow!("找不到规则 {rule_id}"))?;
-            let rule = &mut inner.config.rules[index];
-            rule.name = input.name.trim().to_string();
-            rule.app_path = input.app_path.trim().to_string();
-            rule.args = input.args.trim().to_string();
-            rule.working_dir = input.working_dir.trim().to_string();
-            rule.selected_node = normalize_node(input.selected_node);
-            rule.enabled = input.enabled;
-            let updated = rule.clone();
-            if !updated.enabled {
-                if let Some(mut child) = inner.launched_apps.remove(rule_id) {
-                    let _ = child.kill();
-                }
-            }
+                .subscriptions
+                .iter_mut()
+                .find(|subscription| subscription.id == subscription_id)
+                .ok_or_else(|| anyhow!("找不到订阅 {subscription_id}"))?;
+            subscription.name = input.name.trim().to_string();
+            subscription.url = input.url.trim().to_string();
+            subscription.enabled = input.enabled;
+            let updated = subscription.clone();
             save_config(&self.paths.app_config_path, &inner.config)?;
             updated
         };
@@ -198,104 +220,342 @@ impl AppManager {
         Ok(updated)
     }
 
-    pub async fn delete_rule(&self, rule_id: &str) -> Result<()> {
+    pub async fn delete_subscription(&self, subscription_id: &str) -> Result<()> {
         {
             let mut inner = self.inner.lock().await;
-            if let Some(mut child) = inner.launched_apps.remove(rule_id) {
-                let _ = child.kill();
+            let before = inner.config.subscriptions.len();
+            inner
+                .config
+                .subscriptions
+                .retain(|subscription| subscription.id != subscription_id);
+            if inner.config.subscriptions.len() == before {
+                bail!("找不到订阅 {subscription_id}");
             }
-            inner.config.rules.retain(|rule| rule.id != rule_id);
             save_config(&self.paths.app_config_path, &inner.config)?;
         }
         self.apply_runtime().await
     }
 
-    pub async fn set_rule_node(&self, rule_id: &str, node: String) -> Result<()> {
+    pub async fn refresh_subscription(&self, subscription_id: &str) -> Result<Vec<NodeInfo>> {
+        self.ensure_core_running().await?;
+        let subscription = {
+            let inner = self.inner.lock().await;
+            inner
+                .config
+                .subscriptions
+                .iter()
+                .find(|subscription| subscription.id == subscription_id)
+                .cloned()
+                .ok_or_else(|| anyhow!("找不到订阅 {subscription_id}"))?
+        };
+        if !subscription.enabled {
+            bail!("订阅已关闭：{}", subscription.name);
+        }
+        self.refresh_provider(&subscription).await?;
+        self.refresh_node_cache().await
+    }
+
+    pub async fn refresh_nodes(&self) -> Result<Vec<NodeInfo>> {
+        self.ensure_core_running().await?;
+        let subscriptions = {
+            let inner = self.inner.lock().await;
+            inner
+                .config
+                .subscriptions
+                .iter()
+                .filter(|subscription| subscription.enabled)
+                .cloned()
+                .collect::<Vec<_>>()
+        };
+        for subscription in &subscriptions {
+            self.refresh_provider(subscription).await?;
+        }
+        self.refresh_node_cache().await
+    }
+
+    pub async fn set_global_proxy_enabled(&self, enabled: bool) -> Result<()> {
+        {
+            let mut inner = self.inner.lock().await;
+            inner.config.global_proxy_enabled = enabled;
+            inner.status_message = Some(if enabled {
+                "全局代理链路已开启".to_string()
+            } else {
+                "全局代理链路已切换为 DIRECT".to_string()
+            });
+            save_config(&self.paths.app_config_path, &inner.config)?;
+        }
+        self.ensure_core_running().await?;
+        self.sync_channel_selections().await;
+        Ok(())
+    }
+
+    pub async fn set_http_api_config(&self, enabled: bool, port: u16) -> Result<()> {
+        if port == 0 {
+            bail!("HTTP API 端口无效");
+        }
+        {
+            let mut inner = self.inner.lock().await;
+            inner.config.http_api_enabled = enabled;
+            inner.config.http_api_port = port;
+            inner.status_message = Some(if enabled {
+                format!("HTTP API 已开启：127.0.0.1:{port}")
+            } else {
+                "HTTP API 已关闭".to_string()
+            });
+            save_config(&self.paths.app_config_path, &inner.config)?;
+        }
+        self.apply_http_api_runtime().await
+    }
+
+    pub async fn toggle_global_proxy_enabled(&self) -> Result<bool> {
+        let next = {
+            let inner = self.inner.lock().await;
+            !inner.config.global_proxy_enabled
+        };
+        self.set_global_proxy_enabled(next).await?;
+        Ok(next)
+    }
+
+    pub async fn create_channel(&self, input: ChannelInput) -> Result<ProxyChannel> {
+        validate_channel_input(&input)?;
+        let channel = {
+            let mut inner = self.inner.lock().await;
+            let ports = allocate_channel_ports(&inner.config);
+            let channel = ProxyChannel {
+                id: short_id(),
+                name: input.name.trim().to_string(),
+                selected_node: normalize_node(input.selected_node),
+                enabled: input.enabled,
+                http_port: ports[0],
+                socks_port: ports[1],
+                mihomo_http_port: ports[2],
+                mihomo_socks_port: ports[3],
+            };
+            inner.config.channels.push(channel.clone());
+            save_config(&self.paths.app_config_path, &inner.config)?;
+            channel
+        };
+        self.apply_runtime().await?;
+        Ok(channel)
+    }
+
+    pub async fn update_channel(
+        &self,
+        channel_id: &str,
+        input: ChannelInput,
+    ) -> Result<ProxyChannel> {
+        validate_channel_input(&input)?;
+        let updated = {
+            let mut inner = self.inner.lock().await;
+            let index = inner
+                .config
+                .channels
+                .iter()
+                .position(|channel| channel.id == channel_id)
+                .ok_or_else(|| anyhow!("找不到代理通道 {channel_id}"))?;
+            let channel = &mut inner.config.channels[index];
+            channel.name = input.name.trim().to_string();
+            channel.selected_node = normalize_node(input.selected_node);
+            channel.enabled = input.enabled;
+            let updated = channel.clone();
+            save_config(&self.paths.app_config_path, &inner.config)?;
+            updated
+        };
+        self.ensure_core_running().await?;
+        self.select_effective_channel_node(channel_id).await?;
+        Ok(updated)
+    }
+
+    pub async fn delete_channel(&self, channel_id: &str) -> Result<()> {
+        {
+            let mut inner = self.inner.lock().await;
+            let before = inner.config.channels.len();
+            inner
+                .config
+                .channels
+                .retain(|channel| channel.id != channel_id);
+            if inner.config.channels.len() == before {
+                bail!("找不到代理通道 {channel_id}");
+            }
+            inner.metrics.remove(channel_id);
+            inner.last_errors.remove(channel_id);
+            save_config(&self.paths.app_config_path, &inner.config)?;
+        }
+        self.apply_runtime().await
+    }
+
+    pub async fn set_channel_enabled(
+        &self,
+        channel_id: &str,
+        enabled: bool,
+    ) -> Result<ProxyChannel> {
+        let updated = {
+            let mut inner = self.inner.lock().await;
+            let channel = inner
+                .config
+                .channels
+                .iter_mut()
+                .find(|channel| channel.id == channel_id)
+                .ok_or_else(|| anyhow!("找不到代理通道 {channel_id}"))?;
+            channel.enabled = enabled;
+            let updated = channel.clone();
+            save_config(&self.paths.app_config_path, &inner.config)?;
+            updated
+        };
+        self.ensure_core_running().await?;
+        self.select_effective_channel_node(channel_id).await?;
+        Ok(updated)
+    }
+
+    pub async fn duplicate_channel(&self, channel_id: &str) -> Result<ProxyChannel> {
+        let duplicated = {
+            let mut inner = self.inner.lock().await;
+            let original = inner
+                .config
+                .channels
+                .iter()
+                .find(|channel| channel.id == channel_id)
+                .cloned()
+                .ok_or_else(|| anyhow!("找不到代理通道 {channel_id}"))?;
+            let ports = allocate_channel_ports(&inner.config);
+            let mut duplicated = original;
+            duplicated.id = short_id();
+            duplicated.name = next_duplicate_name(&inner.config.channels, &duplicated.name);
+            duplicated.http_port = ports[0];
+            duplicated.socks_port = ports[1];
+            duplicated.mihomo_http_port = ports[2];
+            duplicated.mihomo_socks_port = ports[3];
+            inner.config.channels.push(duplicated.clone());
+            save_config(&self.paths.app_config_path, &inner.config)?;
+            duplicated
+        };
+        self.apply_runtime().await?;
+        Ok(duplicated)
+    }
+
+    pub async fn set_channel_node(&self, channel_id: &str, node: String) -> Result<()> {
         let node = if node.trim().is_empty() {
             "DIRECT".to_string()
         } else {
             node.trim().to_string()
         };
-        let enabled = {
-            let mut inner = self.inner.lock().await;
-            let rule = inner
-                .config
-                .rules
-                .iter_mut()
-                .find(|rule| rule.id == rule_id)
-                .ok_or_else(|| anyhow!("找不到规则 {rule_id}"))?;
-            rule.selected_node = Some(node.clone());
-            let enabled = rule.enabled;
-            save_config(&self.paths.app_config_path, &inner.config)?;
-            enabled
-        };
-        if enabled {
-            self.select_rule_node(rule_id, &node).await
-        } else {
-            Ok(())
-        }
-    }
-
-    pub async fn start_rule_app(&self, rule_id: &str) -> Result<()> {
-        self.ensure_core_running().await?;
-        let rule = {
-            let inner = self.inner.lock().await;
-            inner
-                .config
-                .rules
-                .iter()
-                .find(|rule| rule.id == rule_id)
-                .cloned()
-                .ok_or_else(|| anyhow!("找不到规则 {rule_id}"))?
-        };
-
-        if !rule.enabled {
-            bail!("规则已禁用");
-        }
-
-        let app_path = PathBuf::from(&rule.app_path);
-        if !app_path.exists() {
-            bail!("软件路径不存在：{}", rule.app_path);
-        }
-
-        let mut command = command_for_app_path(&rule.app_path);
-        let args = split_args(&rule.args)?;
-        command.args(args);
-
-        if !rule.working_dir.trim().is_empty() {
-            command.current_dir(&rule.working_dir);
-        } else if let Some(parent) = app_path.parent() {
-            command.current_dir(parent);
-        }
-
-        let proxy = format!("http://127.0.0.1:{}", rule.meter_port);
-        command
-            .env("HTTP_PROXY", &proxy)
-            .env("HTTPS_PROXY", &proxy)
-            .env("http_proxy", &proxy)
-            .env("https_proxy", &proxy);
-
-        #[cfg(windows)]
         {
-            use std::os::windows::process::CommandExt;
-            command.creation_flags(0x08000000);
+            let mut inner = self.inner.lock().await;
+            let channel = inner
+                .config
+                .channels
+                .iter_mut()
+                .find(|channel| channel.id == channel_id)
+                .ok_or_else(|| anyhow!("找不到代理通道 {channel_id}"))?;
+            channel.selected_node = Some(node);
+            save_config(&self.paths.app_config_path, &inner.config)?;
         }
-
-        let child = command
-            .spawn()
-            .with_context(|| format!("启动软件失败：{}", rule.app_path))?;
-        let mut inner = self.inner.lock().await;
-        inner.launched_apps.insert(rule_id.to_string(), child);
-        Ok(())
+        self.ensure_core_running().await?;
+        self.select_effective_channel_node(channel_id).await
     }
 
-    pub async fn stop_rule_app(&self, rule_id: &str) -> Result<()> {
+    pub async fn diagnose_channel(&self, channel_id: &str) -> Result<ChannelDiagnostics> {
         let mut inner = self.inner.lock().await;
-        let Some(mut child) = inner.launched_apps.remove(rule_id) else {
-            return Ok(());
+        reap_core_status(&mut inner)?;
+        let channel = inner
+            .config
+            .channels
+            .iter()
+            .find(|channel| channel.id == channel_id)
+            .cloned()
+            .ok_or_else(|| anyhow!("找不到代理通道 {channel_id}"))?;
+        let selected_node = selected_node_name(&channel);
+        let effective_node = effective_node_for(&inner.config, &channel);
+        let network_mode = network_mode_for(&effective_node);
+        let stats = stats_for_channel(&mut inner, channel_id);
+        let core_running = inner.core.is_some();
+        Ok(ChannelDiagnostics {
+            channel_id: channel.id,
+            channel_name: channel.name,
+            selected_node,
+            effective_node,
+            global_proxy_enabled: inner.config.global_proxy_enabled,
+            channel_proxy_enabled: channel.enabled,
+            core_running,
+            network_mode,
+            http_url: format!("http://127.0.0.1:{}", channel.http_port),
+            socks_url: format!("socks5://127.0.0.1:{}", channel.socks_port),
+            http_port: channel.http_port,
+            socks_port: channel.socks_port,
+            mihomo_http_port: channel.mihomo_http_port,
+            mihomo_socks_port: channel.mihomo_socks_port,
+            stats,
+            last_error: inner.last_errors.get(channel_id).cloned(),
+        })
+    }
+
+    pub async fn test_channel_proxy(&self, channel_id: &str) -> Result<ChannelProxyTestResult> {
+        self.ensure_core_running().await?;
+        self.select_effective_channel_node(channel_id).await?;
+        let (http_port, socks_port, effective_node, network_mode) = {
+            let inner = self.inner.lock().await;
+            let channel = inner
+                .config
+                .channels
+                .iter()
+                .find(|channel| channel.id == channel_id)
+                .cloned()
+                .ok_or_else(|| anyhow!("找不到代理通道 {channel_id}"))?;
+            let effective_node = effective_node_for(&inner.config, &channel);
+            (
+                channel.http_port,
+                channel.socks_port,
+                effective_node.clone(),
+                network_mode_for(&effective_node),
+            )
         };
-        child.kill().ok();
-        Ok(())
+
+        let started = Instant::now();
+        let http_entry =
+            run_proxy_protocol_test("HTTP", format!("http://127.0.0.1:{http_port}")).await?;
+        let socks_entry =
+            run_proxy_protocol_test("SOCKS5", format!("socks5h://127.0.0.1:{socks_port}")).await?;
+        let elapsed_ms = started.elapsed().as_millis();
+
+        let entries = vec![http_entry, socks_entry];
+        let success = entries.iter().all(|entry| entry.success);
+        let error = if success {
+            None
+        } else {
+            Some(
+                entries
+                    .iter()
+                    .filter(|entry| !entry.success)
+                    .map(|entry| {
+                        format!(
+                            "{}: {}",
+                            entry.protocol,
+                            entry
+                                .error
+                                .clone()
+                                .unwrap_or_else(|| "连接失败".to_string())
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("；"),
+            )
+        };
+        let result = ChannelProxyTestResult {
+            channel_id: channel_id.to_string(),
+            network_mode,
+            effective_node,
+            success,
+            elapsed_ms,
+            error,
+            entries,
+        };
+
+        if result.success {
+            self.clear_channel_error(channel_id).await;
+        } else if let Some(error) = &result.error {
+            self.remember_channel_error(channel_id, error.clone()).await;
+        }
+        Ok(result)
     }
 
     pub async fn restart_core(&self) -> Result<()> {
@@ -321,19 +581,23 @@ impl AppManager {
             .get("delay")
             .and_then(Value::as_u64)
             .unwrap_or_default() as u32;
-        let _ = self.refresh_nodes().await;
+        let _ = self.refresh_node_cache().await;
         Ok(DelayResult { node, delay })
     }
 
     pub async fn apply_runtime(&self) -> Result<()> {
         self.stop_core_and_meters().await;
         let result = async {
+            self.normalize_runtime_ports().await?;
             self.write_mihomo_config().await?;
             self.start_meter_servers().await?;
             self.start_core().await?;
             self.wait_for_core().await?;
-            self.sync_rule_selections().await;
-            let nodes = self.fetch_nodes().await.unwrap_or_else(|_| vec![direct_node()]);
+            self.sync_channel_selections().await;
+            let nodes = self
+                .fetch_nodes()
+                .await
+                .unwrap_or_else(|_| vec![direct_node()]);
             let mut inner = self.inner.lock().await;
             inner.nodes = nodes;
             inner.status_message = Some("mihomo 核心已就绪".to_string());
@@ -372,12 +636,45 @@ impl AppManager {
             for (_, task) in inner.meter_tasks.drain() {
                 task.abort();
             }
+            inner.core_version = None;
             inner.core.take()
         };
 
         if let Some(mut child) = child {
             let _ = child.start_kill();
             let _ = child.wait().await;
+        }
+    }
+
+    async fn apply_http_api_runtime(&self) -> Result<()> {
+        self.stop_http_api_server().await;
+        let (enabled, port, token) = {
+            let inner = self.inner.lock().await;
+            (
+                inner.config.http_api_enabled,
+                inner.config.http_api_port,
+                inner.config.http_api_token.clone(),
+            )
+        };
+
+        if !enabled {
+            return Ok(());
+        }
+
+        let shutdown = crate::http_api::start(self.clone(), port, token)?;
+        let mut inner = self.inner.lock().await;
+        inner.http_shutdown = Some(shutdown);
+        inner.status_message = Some(format!("HTTP API 已监听 127.0.0.1:{port}"));
+        Ok(())
+    }
+
+    async fn stop_http_api_server(&self) {
+        let shutdown = {
+            let mut inner = self.inner.lock().await;
+            inner.http_shutdown.take()
+        };
+        if let Some(shutdown) = shutdown {
+            let _ = shutdown.send(());
         }
     }
 
@@ -394,25 +691,54 @@ impl AppManager {
     }
 
     async fn start_meter_servers(&self) -> Result<()> {
-        let rules = {
+        let channels = {
             let inner = self.inner.lock().await;
-            inner.config.rules.clone()
+            inner.config.channels.clone()
         };
 
-        for rule in rules.into_iter().filter(|rule| rule.enabled) {
+        for channel in channels {
             let metrics = {
                 let mut inner = self.inner.lock().await;
                 inner
                     .metrics
-                    .entry(rule.id.clone())
-                    .or_insert_with(|| Arc::new(StdMutex::new(RuleMetrics::new(rule.id.clone()))))
+                    .entry(channel.id.clone())
+                    .or_insert_with(|| {
+                        Arc::new(StdMutex::new(ChannelMetrics::new(channel.id.clone())))
+                    })
                     .clone()
             };
-            let task =
-                start_meter_proxy(rule.name.clone(), rule.meter_port, rule.mihomo_port, metrics)
-                    .await?;
+            let http_task = start_meter_proxy(
+                format!("{} HTTP", channel.name),
+                MeterProtocol::Http,
+                channel.http_port,
+                channel.mihomo_http_port,
+                metrics,
+            )
+            .await?;
+            let socks_task = start_meter_proxy(
+                format!("{} SOCKS5", channel.name),
+                MeterProtocol::Socks5,
+                channel.socks_port,
+                channel.mihomo_socks_port,
+                {
+                    let mut inner = self.inner.lock().await;
+                    inner
+                        .metrics
+                        .entry(channel.id.clone())
+                        .or_insert_with(|| {
+                            Arc::new(StdMutex::new(ChannelMetrics::new(channel.id.clone())))
+                        })
+                        .clone()
+                },
+            )
+            .await?;
             let mut inner = self.inner.lock().await;
-            inner.meter_tasks.insert(rule.id.clone(), task);
+            inner
+                .meter_tasks
+                .insert(format!("{}:http", channel.id), http_task);
+            inner
+                .meter_tasks
+                .insert(format!("{}:socks", channel.id), socks_task);
         }
         Ok(())
     }
@@ -429,14 +755,16 @@ impl AppManager {
             .arg("-f")
             .arg(&self.paths.config_path)
             .current_dir(&self.paths.runtime_dir)
-            .env("SAFE_PATHS", self.paths.runtime_dir.to_string_lossy().to_string())
+            .env(
+                "SAFE_PATHS",
+                self.paths.runtime_dir.to_string_lossy().to_string(),
+            )
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
 
         #[cfg(windows)]
         {
-            use std::os::windows::process::CommandExt;
             command.creation_flags(0x08000000);
         }
 
@@ -461,6 +789,7 @@ impl AppManager {
                         .and_then(Value::as_str)
                         .unwrap_or("unknown")
                         .to_string();
+                    self.verify_channel_groups().await?;
                     let mut inner = self.inner.lock().await;
                     inner.core_version = Some(version);
                     return Ok(());
@@ -475,30 +804,173 @@ impl AppManager {
         Err(last_error.unwrap_or_else(|| anyhow!("mihomo 核心健康检查超时")))
     }
 
-    async fn sync_rule_selections(&self) {
+    async fn refresh_provider(&self, subscription: &Subscription) -> Result<()> {
+        let path = format!(
+            "/providers/proxies/{}",
+            urlencoding::encode(&provider_name(&subscription.id))
+        );
+        match self.mihomo_request(reqwest::Method::PUT, &path, None).await {
+            Ok(_) => {}
+            Err(first_error) if is_not_found_error(&first_error) => {
+                self.apply_runtime().await?;
+                self.mihomo_request(reqwest::Method::PUT, &path, None)
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "刷新订阅失败：{}。核心重启后仍找不到 provider {}",
+                            subscription.name,
+                            provider_name(&subscription.id)
+                        )
+                    })?;
+            }
+            Err(error) => {
+                return Err(error).with_context(|| format!("刷新订阅失败：{}", subscription.name));
+            }
+        }
+        Ok(())
+    }
+
+    async fn normalize_runtime_ports(&self) -> Result<()> {
+        let mut inner = self.inner.lock().await;
+        let mut changed = false;
+        let mut reserved = HashSet::new();
+
+        if !port_is_usable(inner.config.controller_port, &reserved) {
+            inner.config.controller_port =
+                allocate_available_port(inner.config.port_range_start, &mut reserved);
+            changed = true;
+        } else {
+            reserved.insert(inner.config.controller_port);
+        }
+
+        let port_range_start = inner.config.port_range_start;
+        for channel in &mut inner.config.channels {
+            if !port_is_usable(channel.http_port, &reserved) {
+                channel.http_port = allocate_available_port(port_range_start, &mut reserved);
+                changed = true;
+            } else {
+                reserved.insert(channel.http_port);
+            }
+
+            if !port_is_usable(channel.socks_port, &reserved) {
+                channel.socks_port = allocate_available_port(port_range_start, &mut reserved);
+                changed = true;
+            } else {
+                reserved.insert(channel.socks_port);
+            }
+
+            if !port_is_usable(channel.mihomo_http_port, &reserved) {
+                channel.mihomo_http_port = allocate_available_port(port_range_start, &mut reserved);
+                changed = true;
+            } else {
+                reserved.insert(channel.mihomo_http_port);
+            }
+
+            if !port_is_usable(channel.mihomo_socks_port, &reserved) {
+                channel.mihomo_socks_port =
+                    allocate_available_port(port_range_start, &mut reserved);
+                changed = true;
+            } else {
+                reserved.insert(channel.mihomo_socks_port);
+            }
+        }
+
+        if changed {
+            inner.status_message = Some("检测到端口占用，已自动重新分配运行端口".to_string());
+            save_config(&self.paths.app_config_path, &inner.config)?;
+        }
+        Ok(())
+    }
+
+    async fn verify_channel_groups(&self) -> Result<()> {
+        let expected = {
+            let inner = self.inner.lock().await;
+            inner
+                .config
+                .channels
+                .iter()
+                .map(|channel| (channel.name.clone(), group_name(&channel.id)))
+                .collect::<Vec<_>>()
+        };
+        if expected.is_empty() {
+            return Ok(());
+        }
+
+        let value = self
+            .mihomo_request(reqwest::Method::GET, "/proxies", None)
+            .await?;
+        let proxies = value
+            .get("proxies")
+            .and_then(Value::as_object)
+            .ok_or_else(|| anyhow!("mihomo /proxies 响应缺少 proxies 字段"))?;
+
+        let missing = expected
+            .into_iter()
+            .find(|(_, group)| !proxies.contains_key(group));
+        if let Some((channel_name, group)) = missing {
+            bail!("mihomo 当前配置缺少通道组 {group}（{channel_name}）");
+        }
+        Ok(())
+    }
+
+    async fn refresh_node_cache(&self) -> Result<Vec<NodeInfo>> {
+        let nodes = self.fetch_nodes().await?;
+        let mut inner = self.inner.lock().await;
+        inner.nodes = nodes.clone();
+        Ok(nodes)
+    }
+
+    async fn sync_channel_selections(&self) {
         let selections = {
             let inner = self.inner.lock().await;
             inner
                 .config
-                .rules
+                .channels
                 .iter()
-                .filter(|rule| rule.enabled)
-                .filter_map(|rule| {
-                    rule.selected_node
-                        .clone()
-                        .map(|node| (rule.id.clone(), node))
+                .map(|channel| {
+                    (
+                        channel.id.clone(),
+                        effective_node_for(&inner.config, channel),
+                    )
                 })
                 .collect::<Vec<_>>()
         };
 
-        for (rule_id, node) in selections {
-            let _ = self.select_rule_node(&rule_id, &node).await;
+        for (channel_id, node) in selections {
+            match self.select_channel_node(&channel_id, &node).await {
+                Ok(()) => self.clear_channel_error(&channel_id).await,
+                Err(err) => {
+                    self.remember_channel_error(&channel_id, format!("{err:#}"))
+                        .await;
+                }
+            }
         }
     }
 
-    async fn select_rule_node(&self, rule_id: &str, node: &str) -> Result<()> {
-        self.ensure_core_running().await?;
-        let path = format!("/proxies/{}", urlencoding::encode(&group_name(rule_id)));
+    async fn select_effective_channel_node(&self, channel_id: &str) -> Result<()> {
+        let node = {
+            let inner = self.inner.lock().await;
+            let channel = inner
+                .config
+                .channels
+                .iter()
+                .find(|channel| channel.id == channel_id)
+                .ok_or_else(|| anyhow!("找不到代理通道 {channel_id}"))?;
+            effective_node_for(&inner.config, channel)
+        };
+        let result = self.select_channel_node(channel_id, &node).await;
+        match &result {
+            Ok(()) => self.clear_channel_error(channel_id).await,
+            Err(err) => {
+                self.remember_channel_error(channel_id, format!("{err:#}"))
+                    .await
+            }
+        }
+        result
+    }
+
+    async fn select_channel_node(&self, channel_id: &str, node: &str) -> Result<()> {
+        let path = format!("/proxies/{}", urlencoding::encode(&group_name(channel_id)));
         self.mihomo_request(
             reqwest::Method::PUT,
             &path,
@@ -506,10 +978,11 @@ impl AppManager {
         )
         .await
         .map(|_| ())
-        .with_context(|| format!("切换规则节点失败：{node}"))
+        .with_context(|| format!("切换通道节点失败：{node}"))
     }
 
     async fn fetch_nodes(&self) -> Result<Vec<NodeInfo>> {
+        let provider_sources = self.fetch_provider_sources().await;
         let value = self
             .mihomo_request(reqwest::Method::GET, "/proxies", None)
             .await?;
@@ -545,15 +1018,89 @@ impl AppManager {
                 .and_then(Value::as_u64)
                 .map(|delay| delay as u32)
                 .filter(|delay| *delay > 0);
+            let (provider_id, provider_name) =
+                provider_sources.get(name).cloned().unwrap_or((None, None));
             nodes.push(NodeInfo {
                 name: name.clone(),
                 node_type,
                 delay,
                 is_builtin: false,
+                provider_id,
+                provider_name,
             });
         }
-        nodes.sort_by(|a, b| a.is_builtin.cmp(&b.is_builtin).reverse().then(a.name.cmp(&b.name)));
+        nodes.sort_by(|a, b| {
+            a.is_builtin
+                .cmp(&b.is_builtin)
+                .reverse()
+                .then(a.provider_name.cmp(&b.provider_name))
+                .then(a.name.cmp(&b.name))
+        });
         Ok(nodes)
+    }
+
+    async fn fetch_provider_sources(&self) -> HashMap<String, (Option<String>, Option<String>)> {
+        let (subscription_lookup, fallback_subscription) = {
+            let inner = self.inner.lock().await;
+            let lookup = inner
+                .config
+                .subscriptions
+                .iter()
+                .map(|subscription| {
+                    (
+                        provider_name(&subscription.id),
+                        (subscription.id.clone(), subscription.name.clone()),
+                    )
+                })
+                .collect::<HashMap<_, _>>();
+            let fallback = if inner.config.subscriptions.len() == 1 {
+                inner
+                    .config
+                    .subscriptions
+                    .first()
+                    .map(|subscription| (subscription.id.clone(), subscription.name.clone()))
+            } else {
+                None
+            };
+            (lookup, fallback)
+        };
+
+        let Ok(value) = self
+            .mihomo_request(reqwest::Method::GET, "/providers/proxies", None)
+            .await
+        else {
+            return HashMap::new();
+        };
+
+        let Some(providers) = value.get("providers").and_then(Value::as_object) else {
+            return HashMap::new();
+        };
+
+        let mut sources = HashMap::new();
+        for (provider_key, provider_value) in providers {
+            let source = subscription_lookup
+                .get(provider_key)
+                .cloned()
+                .or_else(|| fallback_subscription.clone());
+            let Some((subscription_id, subscription_name)) = source else {
+                continue;
+            };
+            let Some(proxies) = provider_value.get("proxies").and_then(Value::as_array) else {
+                continue;
+            };
+            for proxy in proxies {
+                if let Some(name) = proxy.get("name").and_then(Value::as_str) {
+                    sources.insert(
+                        name.to_string(),
+                        (
+                            Some(subscription_id.clone()),
+                            Some(subscription_name.clone()),
+                        ),
+                    );
+                }
+            }
+        }
+        sources
     }
 
     async fn mihomo_request(
@@ -569,7 +1116,7 @@ impl AppManager {
                 inner.config.controller_secret.clone(),
             )
         };
-        let mut request = self.client.request(method, url).bearer_auth(secret);
+        let mut request = self.local_client.request(method, url).bearer_auth(secret);
         if let Some(body) = body {
             request = request.json(&body);
         }
@@ -585,13 +1132,14 @@ impl AppManager {
         Ok(serde_json::from_str(&text).unwrap_or(Value::Null))
     }
 
-    async fn reap_finished_apps(&self) {
+    async fn remember_channel_error(&self, channel_id: &str, error: String) {
         let mut inner = self.inner.lock().await;
-        inner.launched_apps.retain(|_, child| match child.try_wait() {
-            Ok(Some(_)) => false,
-            Ok(None) => true,
-            Err(_) => false,
-        });
+        inner.last_errors.insert(channel_id.to_string(), error);
+    }
+
+    async fn clear_channel_error(&self, channel_id: &str) {
+        let mut inner = self.inner.lock().await;
+        inner.last_errors.remove(channel_id);
     }
 
     fn runtime_status(&self, inner: &InnerState) -> RuntimeStatus {
@@ -607,20 +1155,38 @@ impl AppManager {
     }
 }
 
-fn collect_stats(inner: &mut InnerState) -> Vec<RuleStats> {
+fn collect_stats(inner: &mut InnerState) -> Vec<ChannelStats> {
     inner
         .config
-        .rules
+        .channels
+        .clone()
         .iter()
-        .filter_map(|rule| {
-            let metrics = inner
-                .metrics
-                .entry(rule.id.clone())
-                .or_insert_with(|| Arc::new(StdMutex::new(RuleMetrics::new(rule.id.clone()))))
-                .clone();
-            metrics.lock().ok().map(|mut guard| guard.snapshot())
-        })
+        .map(|channel| stats_for_channel(inner, &channel.id))
         .collect()
+}
+
+fn stats_for_channel(inner: &mut InnerState, channel_id: &str) -> ChannelStats {
+    let metrics = inner
+        .metrics
+        .entry(channel_id.to_string())
+        .or_insert_with(|| Arc::new(StdMutex::new(ChannelMetrics::new(channel_id.to_string()))))
+        .clone();
+    metrics
+        .lock()
+        .map(|mut guard| guard.snapshot())
+        .unwrap_or_else(|_| empty_stats(channel_id))
+}
+
+fn empty_stats(channel_id: &str) -> ChannelStats {
+    ChannelStats {
+        channel_id: channel_id.to_string(),
+        upload_total: 0,
+        download_total: 0,
+        upload_speed: 0.0,
+        download_speed: 0.0,
+        active_connections: 0,
+        recent_targets: Vec::new(),
+    }
 }
 
 fn reap_core_status(inner: &mut InnerState) -> Result<()> {
@@ -642,7 +1208,74 @@ fn load_config(path: &Path) -> Result<AppConfig> {
         return Ok(AppConfig::default());
     }
     let raw = fs::read_to_string(path)?;
-    Ok(serde_json::from_str(&raw)?)
+    let mut config = serde_json::from_str::<AppConfig>(&raw)?;
+    let needs_http_api_defaults = !raw.contains("\"http_api_token\"")
+        || !raw.contains("\"http_api_port\"")
+        || !raw.contains("\"http_api_enabled\"");
+    if migrate_config(&mut config) || needs_http_api_defaults {
+        save_config(path, &config)?;
+    }
+    Ok(config)
+}
+
+fn migrate_config(config: &mut AppConfig) -> bool {
+    let mut changed = false;
+    if config.channels.is_empty() && !config.legacy_rules.is_empty() {
+        let mut used = used_ports(config);
+        for legacy in std::mem::take(&mut config.legacy_rules) {
+            let http_port = if legacy.meter_port > 0 && !used.contains(&legacy.meter_port) {
+                used.insert(legacy.meter_port);
+                legacy.meter_port
+            } else {
+                allocate_available_port(config.port_range_start, &mut used)
+            };
+            let mihomo_http_port = if legacy.mihomo_port > 0 && !used.contains(&legacy.mihomo_port)
+            {
+                used.insert(legacy.mihomo_port);
+                legacy.mihomo_port
+            } else {
+                allocate_available_port(config.port_range_start, &mut used)
+            };
+            let socks_port = allocate_available_port(config.port_range_start, &mut used);
+            let mihomo_socks_port = allocate_available_port(config.port_range_start, &mut used);
+            config.channels.push(ProxyChannel {
+                id: legacy.id,
+                name: legacy.name,
+                selected_node: normalize_node(legacy.selected_node),
+                enabled: legacy.enabled,
+                http_port,
+                socks_port,
+                mihomo_http_port,
+                mihomo_socks_port,
+            });
+        }
+        changed = true;
+    } else if !config.legacy_rules.is_empty() {
+        config.legacy_rules.clear();
+        changed = true;
+    }
+
+    if config.subscriptions.is_empty() {
+        if let Some(url) = config
+            .subscription_url
+            .as_ref()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+        {
+            config.subscriptions.push(Subscription {
+                id: "default".to_string(),
+                name: "默认订阅".to_string(),
+                url,
+                enabled: true,
+            });
+            changed = true;
+        }
+    }
+    if config.subscription_url.is_some() {
+        config.subscription_url = None;
+        changed = true;
+    }
+    changed
 }
 
 fn save_config(path: &Path, config: &AppConfig) -> Result<()> {
@@ -676,12 +1309,19 @@ fn resolve_core_path(app: &AppHandle) -> Result<PathBuf> {
         .ok_or_else(|| anyhow!("未找到 mihomo 核心 core\\{exe_name}"))
 }
 
-fn validate_rule_input(input: &RuleInput) -> Result<()> {
+fn validate_subscription_input(input: &SubscriptionInput) -> Result<()> {
     if input.name.trim().is_empty() {
-        bail!("规则名不能为空");
+        bail!("订阅名称不能为空");
     }
-    if input.app_path.trim().is_empty() {
-        bail!("软件路径不能为空");
+    if input.url.trim().is_empty() {
+        bail!("订阅地址不能为空");
+    }
+    Ok(())
+}
+
+fn validate_channel_input(input: &ChannelInput) -> Result<()> {
+    if input.name.trim().is_empty() {
+        bail!("通道名不能为空");
     }
     Ok(())
 }
@@ -692,26 +1332,236 @@ fn normalize_node(node: Option<String>) -> Option<String> {
         .or_else(|| Some("DIRECT".to_string()))
 }
 
-fn allocate_port(config: &AppConfig, extra_used: Option<u16>) -> u16 {
-    let mut used = Vec::new();
-    if let Some(port) = extra_used {
-        used.push(port);
-    }
-    used.push(config.controller_port);
-    for rule in &config.rules {
-        used.push(rule.meter_port);
-        used.push(rule.mihomo_port);
-    }
+fn selected_node_name(channel: &ProxyChannel) -> String {
+    channel
+        .selected_node
+        .clone()
+        .filter(|node| !node.trim().is_empty())
+        .unwrap_or_else(|| "DIRECT".to_string())
+}
 
-    for port in config.port_range_start..=u16::MAX {
-        if used.contains(&port) {
+fn effective_node_for(config: &AppConfig, channel: &ProxyChannel) -> String {
+    if config.global_proxy_enabled && channel.enabled {
+        selected_node_name(channel)
+    } else {
+        "DIRECT".to_string()
+    }
+}
+
+fn network_mode_for(effective_node: &str) -> String {
+    if effective_node.eq_ignore_ascii_case("DIRECT") {
+        "Direct".to_string()
+    } else {
+        "Proxy".to_string()
+    }
+}
+
+#[derive(Clone, Copy)]
+enum TestExpectation {
+    JsonIp,
+    Reachable,
+}
+
+async fn run_proxy_protocol_test(
+    protocol: &str,
+    proxy_url: String,
+) -> Result<ProxyProtocolTestResult> {
+    let client = Client::builder()
+        .timeout(Duration::from_secs(12))
+        .proxy(reqwest::Proxy::all(&proxy_url)?)
+        .build()?;
+    let started = Instant::now();
+    let (ip_test, ip) = run_proxy_endpoint_test(
+        &client,
+        "出口 IP",
+        "https://api.ipify.org?format=json",
+        TestExpectation::JsonIp,
+    )
+    .await;
+    let (google_test, _) = run_proxy_endpoint_test(
+        &client,
+        "Google",
+        "https://www.google.com/generate_204",
+        TestExpectation::Reachable,
+    )
+    .await;
+    let (openai_test, _) = run_proxy_endpoint_test(
+        &client,
+        "OpenAI",
+        "https://api.openai.com/v1/models",
+        TestExpectation::Reachable,
+    )
+    .await;
+    let elapsed_ms = started.elapsed().as_millis();
+    let tests = vec![ip_test, google_test, openai_test];
+    let success = tests.iter().all(|test| test.success);
+    let error = if success {
+        None
+    } else {
+        Some(
+            tests
+                .iter()
+                .filter(|test| !test.success)
+                .map(|test| {
+                    format!(
+                        "{}: {}",
+                        test.name,
+                        test.error.clone().unwrap_or_else(|| "连接失败".to_string())
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("；"),
+        )
+    };
+
+    Ok(ProxyProtocolTestResult {
+        protocol: protocol.to_string(),
+        proxy_url,
+        success,
+        ip,
+        elapsed_ms,
+        error,
+        tests,
+    })
+}
+
+async fn run_proxy_endpoint_test(
+    client: &Client,
+    name: &str,
+    url: &str,
+    expectation: TestExpectation,
+) -> (ProxyEndpointResult, Option<String>) {
+    let started = Instant::now();
+    let response = client.get(url).send().await;
+    let elapsed_ms = started.elapsed().as_millis();
+    match response {
+        Ok(response) => {
+            let status = response.status();
+            let status_code = status.as_u16();
+            let text = response.text().await.unwrap_or_default();
+            match expectation {
+                TestExpectation::JsonIp => {
+                    let ip = parse_ip_response(&text);
+                    let success = status.is_success() && ip.is_some();
+                    (
+                        ProxyEndpointResult {
+                            name: name.to_string(),
+                            url: url.to_string(),
+                            success,
+                            status: Some(status_code),
+                            elapsed_ms,
+                            error: if success {
+                                None
+                            } else {
+                                Some(format!("出口 IP 响应无效：{status}"))
+                            },
+                        },
+                        ip,
+                    )
+                }
+                TestExpectation::Reachable => {
+                    let success = status.is_success()
+                        || status == reqwest::StatusCode::UNAUTHORIZED
+                        || status == reqwest::StatusCode::FORBIDDEN;
+                    (
+                        ProxyEndpointResult {
+                            name: name.to_string(),
+                            url: url.to_string(),
+                            success,
+                            status: Some(status_code),
+                            elapsed_ms,
+                            error: if success {
+                                None
+                            } else {
+                                Some(format!("HTTP {status}: {text}"))
+                            },
+                        },
+                        None,
+                    )
+                }
+            }
+        }
+        Err(err) => (
+            ProxyEndpointResult {
+                name: name.to_string(),
+                url: url.to_string(),
+                success: false,
+                status: None,
+                elapsed_ms,
+                error: Some(format!("{err:#}")),
+            },
+            None,
+        ),
+    }
+}
+
+fn parse_ip_response(text: &str) -> Option<String> {
+    serde_json::from_str::<Value>(text)
+        .ok()
+        .and_then(|value| value.get("ip").and_then(Value::as_str).map(str::to_string))
+        .or_else(|| {
+            let trimmed = text.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        })
+}
+
+fn is_not_found_error(error: &anyhow::Error) -> bool {
+    let text = format!("{error:#}");
+    text.contains("404") || text.contains("Resource not found")
+}
+
+fn allocate_channel_ports(config: &AppConfig) -> [u16; 4] {
+    let mut used = used_ports(config);
+    [
+        allocate_available_port(config.port_range_start, &mut used),
+        allocate_available_port(config.port_range_start, &mut used),
+        allocate_available_port(config.port_range_start, &mut used),
+        allocate_available_port(config.port_range_start, &mut used),
+    ]
+}
+
+fn used_ports(config: &AppConfig) -> HashSet<u16> {
+    let mut used = HashSet::new();
+    used.insert(config.controller_port);
+    used.insert(config.http_api_port);
+    for channel in &config.channels {
+        used.insert(channel.http_port);
+        used.insert(channel.socks_port);
+        used.insert(channel.mihomo_http_port);
+        used.insert(channel.mihomo_socks_port);
+    }
+    used
+}
+
+fn port_is_usable(port: u16, reserved: &HashSet<u16>) -> bool {
+    !reserved.contains(&port) && portpicker::is_free_tcp(port)
+}
+
+fn allocate_available_port(start: u16, reserved: &mut HashSet<u16>) -> u16 {
+    for port in start..=u16::MAX {
+        if reserved.contains(&port) {
             continue;
         }
         if portpicker::is_free_tcp(port) {
+            reserved.insert(port);
             return port;
         }
     }
-    config.port_range_start
+    start
+}
+
+fn next_duplicate_name(channels: &[ProxyChannel], base: &str) -> String {
+    let mut index = 2;
+    let mut name = format!("{base} 副本");
+    while channels.iter().any(|channel| channel.name == name) {
+        name = format!("{base} 副本 {index}");
+        index += 1;
+    }
+    name
 }
 
 fn short_id() -> String {
@@ -729,58 +1579,9 @@ fn direct_node() -> NodeInfo {
         node_type: "Builtin".to_string(),
         delay: None,
         is_builtin: true,
+        provider_id: None,
+        provider_name: None,
     }
-}
-
-fn command_for_app_path(app_path: &str) -> std::process::Command {
-    let extension = Path::new(app_path)
-        .extension()
-        .and_then(|value| value.to_str())
-        .unwrap_or_default();
-
-    if extension.eq_ignore_ascii_case("cmd") || extension.eq_ignore_ascii_case("bat") {
-        let mut command = std::process::Command::new("cmd");
-        command.arg("/C").arg(app_path);
-        command
-    } else {
-        std::process::Command::new(app_path)
-    }
-}
-
-fn split_args(input: &str) -> Result<Vec<String>> {
-    let mut args = Vec::new();
-    let mut current = String::new();
-    let mut chars = input.chars().peekable();
-    let mut quote: Option<char> = None;
-
-    while let Some(ch) = chars.next() {
-        match ch {
-            '"' | '\'' if quote == Some(ch) => quote = None,
-            '"' | '\'' if quote.is_none() => quote = Some(ch),
-            '\\' => {
-                if let Some(next) = chars.next() {
-                    current.push(next);
-                } else {
-                    current.push('\\');
-                }
-            }
-            ch if ch.is_whitespace() && quote.is_none() => {
-                if !current.is_empty() {
-                    args.push(current.clone());
-                    current.clear();
-                }
-            }
-            _ => current.push(ch),
-        }
-    }
-
-    if quote.is_some() {
-        bail!("启动参数中的引号没有闭合");
-    }
-    if !current.is_empty() {
-        args.push(current);
-    }
-    Ok(args)
 }
 
 #[cfg(test)]
@@ -788,39 +1589,72 @@ mod tests {
     use super::*;
 
     #[test]
-    fn splits_quoted_args() {
-        let args = split_args(r#"--profile "work space" --flag"#).unwrap();
-        assert_eq!(args, vec!["--profile", "work space", "--flag"]);
-    }
-
-    #[test]
     fn allocates_distinct_ports() {
         let mut config = AppConfig::default();
         config.port_range_start = 22000;
-        config.rules.push(AppRule {
+        config.channels.push(ProxyChannel {
             id: "one".into(),
             name: "one".into(),
-            app_path: "one.exe".into(),
-            args: String::new(),
-            working_dir: String::new(),
             selected_node: None,
             enabled: true,
-            meter_port: 22000,
-            mihomo_port: 22001,
+            http_port: 22000,
+            socks_port: 22001,
+            mihomo_http_port: 22002,
+            mihomo_socks_port: 22003,
         });
-        let port = allocate_port(&config, None);
-        assert!(port >= 22002);
+        let ports = allocate_channel_ports(&config);
+        assert_eq!(ports, [22004, 22005, 22006, 22007]);
     }
 
     #[test]
-    fn wraps_cmd_launchers() {
-        let command = command_for_app_path(r"C:\Users\me\AppData\Roaming\npm\codex.cmd");
-        assert_eq!(command.get_program().to_string_lossy(), "cmd");
-        let args = command
-            .get_args()
-            .map(|arg| arg.to_string_lossy().to_string())
-            .collect::<Vec<_>>();
-        assert_eq!(args[0], "/C");
-        assert!(args[1].ends_with("codex.cmd"));
+    fn switch_off_uses_direct_without_losing_selected_node() {
+        let mut config = AppConfig::default();
+        let mut channel = ProxyChannel {
+            id: "one".into(),
+            name: "one".into(),
+            selected_node: Some("HK".into()),
+            enabled: false,
+            http_port: 22000,
+            socks_port: 22001,
+            mihomo_http_port: 22002,
+            mihomo_socks_port: 22003,
+        };
+        assert_eq!(effective_node_for(&config, &channel), "DIRECT");
+        channel.enabled = true;
+        assert_eq!(effective_node_for(&config, &channel), "HK");
+        config.global_proxy_enabled = false;
+        assert_eq!(effective_node_for(&config, &channel), "DIRECT");
+        assert_eq!(selected_node_name(&channel), "HK");
+    }
+
+    #[test]
+    fn migrates_legacy_subscription_url() {
+        let mut config = AppConfig::default();
+        config.subscription_url = Some("https://example.com/sub".into());
+        assert!(migrate_config(&mut config));
+        assert!(config.subscription_url.is_none());
+        assert_eq!(config.subscriptions.len(), 1);
+        assert_eq!(config.subscriptions[0].name, "默认订阅");
+    }
+
+    #[test]
+    fn migrates_legacy_rules_to_channels() {
+        let mut config = AppConfig::default();
+        config.port_range_start = 23000;
+        config.legacy_rules.push(crate::models::LegacyRule {
+            id: "old".into(),
+            name: "Chrome".into(),
+            selected_node: Some("HK".into()),
+            enabled: true,
+            meter_port: 23000,
+            mihomo_port: 23001,
+        });
+        assert!(migrate_config(&mut config));
+        assert!(config.legacy_rules.is_empty());
+        assert_eq!(config.channels.len(), 1);
+        assert_eq!(config.channels[0].http_port, 23000);
+        assert_eq!(config.channels[0].mihomo_http_port, 23001);
+        assert_eq!(config.channels[0].socks_port, 23002);
+        assert_eq!(config.channels[0].mihomo_socks_port, 23003);
     }
 }

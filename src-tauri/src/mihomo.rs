@@ -4,8 +4,6 @@ use serde::Serialize;
 
 use crate::models::AppConfig;
 
-const PROVIDER_NAME: &str = "FreeClash";
-
 #[derive(Debug, Serialize)]
 struct MihomoConfig {
     #[serde(rename = "allow-lan")]
@@ -69,30 +67,37 @@ struct Listener {
     proxy: String,
 }
 
-pub fn group_name(rule_id: &str) -> String {
-    format!("fc-rule-{rule_id}")
+pub fn group_name(channel_id: &str) -> String {
+    format!("fc-channel-{channel_id}")
 }
 
-pub fn listener_name(rule_id: &str) -> String {
-    format!("fc-listener-{rule_id}")
+pub fn http_listener_name(channel_id: &str) -> String {
+    format!("fc-http-{channel_id}")
+}
+
+pub fn socks_listener_name(channel_id: &str) -> String {
+    format!("fc-socks-{channel_id}")
+}
+
+pub fn provider_name(subscription_id: &str) -> String {
+    format!("fc-provider-{subscription_id}")
 }
 
 pub fn render_config(config: &AppConfig) -> anyhow::Result<String> {
-    let has_subscription = config
-        .subscription_url
-        .as_ref()
-        .map(|url| !url.trim().is_empty())
-        .unwrap_or(false);
-
-    let proxy_providers = if has_subscription {
-        let mut providers = BTreeMap::new();
+    let mut providers = BTreeMap::new();
+    for subscription in config
+        .subscriptions
+        .iter()
+        .filter(|subscription| subscription.enabled && !subscription.url.trim().is_empty())
+    {
+        let name = provider_name(&subscription.id);
         providers.insert(
-            PROVIDER_NAME.to_string(),
+            name.clone(),
             ProxyProvider {
                 kind: "http".to_string(),
-                url: config.subscription_url.clone().unwrap_or_default(),
+                url: subscription.url.trim().to_string(),
                 interval: 3600,
-                path: "./providers/freeclash.yaml".to_string(),
+                path: format!("./providers/{name}.yaml"),
                 health_check: HealthCheck {
                     enable: true,
                     interval: 600,
@@ -100,39 +105,43 @@ pub fn render_config(config: &AppConfig) -> anyhow::Result<String> {
                 },
             },
         );
-        Some(providers)
-    } else {
+    }
+
+    let provider_keys = providers.keys().cloned().collect::<Vec<_>>();
+    let proxy_providers = if providers.is_empty() {
         None
+    } else {
+        Some(providers)
     };
 
     let proxy_groups = config
-        .rules
+        .channels
         .iter()
-        .filter(|rule| rule.enabled)
-        .map(|rule| ProxyGroup {
-            name: group_name(&rule.id),
+        .map(|channel| ProxyGroup {
+            name: group_name(&channel.id),
             kind: "select".to_string(),
             proxies: vec!["DIRECT".to_string()],
-            use_providers: if has_subscription {
-                vec![PROVIDER_NAME.to_string()]
-            } else {
-                Vec::new()
-            },
+            use_providers: provider_keys.clone(),
         })
         .collect();
 
-    let listeners = config
-        .rules
-        .iter()
-        .filter(|rule| rule.enabled)
-        .map(|rule| Listener {
-            name: listener_name(&rule.id),
+    let mut listeners = Vec::new();
+    for channel in &config.channels {
+        listeners.push(Listener {
+            name: http_listener_name(&channel.id),
             kind: "http".to_string(),
             listen: "127.0.0.1".to_string(),
-            port: rule.mihomo_port,
-            proxy: group_name(&rule.id),
-        })
-        .collect();
+            port: channel.mihomo_http_port,
+            proxy: group_name(&channel.id),
+        });
+        listeners.push(Listener {
+            name: socks_listener_name(&channel.id),
+            kind: "socks".to_string(),
+            listen: "127.0.0.1".to_string(),
+            port: channel.mihomo_socks_port,
+            proxy: group_name(&channel.id),
+        });
+    }
 
     let mihomo = MihomoConfig {
         allow_lan: false,
@@ -155,28 +164,56 @@ pub fn render_config(config: &AppConfig) -> anyhow::Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{AppConfig, AppRule};
+    use crate::models::{AppConfig, ProxyChannel};
 
     #[test]
-    fn renders_listener_and_provider() {
+    fn renders_http_and_socks_listeners_and_provider() {
         let mut config = AppConfig::default();
-        config.subscription_url = Some("https://example.com/sub".into());
-        config.rules.push(AppRule {
+        config.subscriptions.push(crate::models::Subscription {
+            id: "sub1".into(),
+            name: "Sub 1".into(),
+            url: "https://example.com/sub".into(),
+            enabled: true,
+        });
+        config.channels.push(ProxyChannel {
             id: "abc".into(),
             name: "Codex".into(),
-            app_path: "codex.exe".into(),
-            args: String::new(),
-            working_dir: String::new(),
             selected_node: Some("HK".into()),
             enabled: true,
-            meter_port: 19100,
-            mihomo_port: 19101,
+            http_port: 19100,
+            socks_port: 19101,
+            mihomo_http_port: 19102,
+            mihomo_socks_port: 19103,
         });
 
         let yaml = render_config(&config).unwrap();
         assert!(yaml.contains("proxy-providers"));
-        assert!(yaml.contains("fc-rule-abc"));
-        assert!(yaml.contains("port: 19101"));
+        assert!(yaml.contains("fc-provider-sub1"));
+        assert!(yaml.contains("fc-channel-abc"));
+        assert!(yaml.contains("fc-http-abc"));
+        assert!(yaml.contains("fc-socks-abc"));
+        assert!(yaml.contains("port: 19102"));
+        assert!(yaml.contains("port: 19103"));
+        assert!(yaml.contains("type: socks"));
+    }
+
+    #[test]
+    fn renders_disabled_channels_as_direct_capable_listeners() {
+        let mut config = AppConfig::default();
+        config.channels.push(ProxyChannel {
+            id: "off".into(),
+            name: "Disabled".into(),
+            selected_node: Some("HK".into()),
+            enabled: false,
+            http_port: 19100,
+            socks_port: 19101,
+            mihomo_http_port: 19102,
+            mihomo_socks_port: 19103,
+        });
+
+        let yaml = render_config(&config).unwrap();
+        assert!(yaml.contains("fc-channel-off"));
+        assert!(yaml.contains("fc-http-off"));
+        assert!(yaml.contains("fc-socks-off"));
     }
 }
-
