@@ -289,7 +289,7 @@ p {
   gap: 10px;
   justify-content: flex-start;
   min-height: 40px;
-  padding: 0 12px;
+  padding: 0 12px 0 6px;
   color: #4f6073;
   font-size: 15px;
   font-weight: 550;
@@ -301,8 +301,8 @@ p {
 
 .side-nav-label {
   display: inline-block;
-  margin-left: 6px;
-  letter-spacing: 0.08em;
+  margin-left: 12px;
+  letter-spacing: 0.45em;
 }
 
 .side-nav button.active {
