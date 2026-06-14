@@ -46,18 +46,6 @@ async fn create_subscription(
 }
 
 #[tauri::command]
-async fn update_subscription(
-    manager: State<'_, AppManager>,
-    subscription_id: String,
-    input: SubscriptionInput,
-) -> Result<models::Subscription, String> {
-    manager
-        .update_subscription(&subscription_id, input)
-        .await
-        .map_err(display_error)
-}
-
-#[tauri::command]
 async fn delete_subscription(
     manager: State<'_, AppManager>,
     subscription_id: String,
@@ -254,7 +242,6 @@ pub fn run() {
             get_state,
             set_subscription,
             create_subscription,
-            update_subscription,
             delete_subscription,
             refresh_subscription,
             refresh_nodes,

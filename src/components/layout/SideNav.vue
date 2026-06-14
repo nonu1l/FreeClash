@@ -19,7 +19,7 @@ const emit = defineEmits<{
       @click="emit('change', 'channels')"
     >
       <ListChecks :size="18" />
-      代理通道
+      代理
     </button>
     <button
       type="button"
@@ -33,10 +33,10 @@ const emit = defineEmits<{
       type="button"
       class="planned"
       disabled
-      title="后续版本提供独立连接记录视图"
+      title="后续版本提供独立连接视图"
     >
       <History :size="18" />
-      连接记录
+      连接
       <small>规划中</small>
     </button>
     <button

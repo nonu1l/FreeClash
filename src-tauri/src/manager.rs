@@ -192,30 +192,6 @@ impl AppManager {
         Ok(subscription)
     }
 
-    pub async fn update_subscription(
-        &self,
-        subscription_id: &str,
-        input: SubscriptionInput,
-    ) -> Result<Subscription> {
-        validate_subscription_input(&input)?;
-        let updated = {
-            let mut inner = self.inner.lock().await;
-            let subscription = inner
-                .config
-                .subscriptions
-                .iter_mut()
-                .find(|subscription| subscription.id == subscription_id)
-                .ok_or_else(|| anyhow!("找不到订阅 {subscription_id}"))?;
-            subscription.name = input.name.trim().to_string();
-            subscription.url = input.url.trim().to_string();
-            let updated = subscription.clone();
-            save_config(&self.paths.app_config_path, &inner.config)?;
-            updated
-        };
-        self.apply_runtime().await?;
-        Ok(updated)
-    }
-
     pub async fn delete_subscription(&self, subscription_id: &str) -> Result<()> {
         {
             let mut inner = self.inner.lock().await;
@@ -344,7 +320,7 @@ impl AppManager {
                 .channels
                 .iter()
                 .position(|channel| channel.id == channel_id)
-                .ok_or_else(|| anyhow!("找不到代理通道 {channel_id}"))?;
+                .ok_or_else(|| anyhow!("找不到代理 {channel_id}"))?;
             let channel = &mut inner.config.channels[index];
             channel.name = input.name.trim().to_string();
             channel.selected_node = normalize_node(input.selected_node);
@@ -367,7 +343,7 @@ impl AppManager {
                 .channels
                 .retain(|channel| channel.id != channel_id);
             if inner.config.channels.len() == before {
-                bail!("找不到代理通道 {channel_id}");
+                bail!("找不到代理 {channel_id}");
             }
             inner.metrics.remove(channel_id);
             inner.last_errors.remove(channel_id);
@@ -388,7 +364,7 @@ impl AppManager {
                 .channels
                 .iter_mut()
                 .find(|channel| channel.id == channel_id)
-                .ok_or_else(|| anyhow!("找不到代理通道 {channel_id}"))?;
+                .ok_or_else(|| anyhow!("找不到代理 {channel_id}"))?;
             channel.enabled = enabled;
             let updated = channel.clone();
             save_config(&self.paths.app_config_path, &inner.config)?;
@@ -408,7 +384,7 @@ impl AppManager {
                 .iter()
                 .find(|channel| channel.id == channel_id)
                 .cloned()
-                .ok_or_else(|| anyhow!("找不到代理通道 {channel_id}"))?;
+                .ok_or_else(|| anyhow!("找不到代理 {channel_id}"))?;
             let ports = allocate_channel_ports(&inner.config);
             let mut duplicated = original;
             duplicated.id = short_id();
@@ -438,7 +414,7 @@ impl AppManager {
                 .channels
                 .iter_mut()
                 .find(|channel| channel.id == channel_id)
-                .ok_or_else(|| anyhow!("找不到代理通道 {channel_id}"))?;
+                .ok_or_else(|| anyhow!("找不到代理 {channel_id}"))?;
             channel.selected_node = Some(node);
             save_config(&self.paths.app_config_path, &inner.config)?;
         }
@@ -455,7 +431,7 @@ impl AppManager {
             .iter()
             .find(|channel| channel.id == channel_id)
             .cloned()
-            .ok_or_else(|| anyhow!("找不到代理通道 {channel_id}"))?;
+            .ok_or_else(|| anyhow!("找不到代理 {channel_id}"))?;
         let selected_node = selected_node_name(&channel);
         let effective_node = effective_node_for(&inner.config, &channel);
         let network_mode = network_mode_for(&effective_node);
@@ -492,7 +468,7 @@ impl AppManager {
                 .iter()
                 .find(|channel| channel.id == channel_id)
                 .cloned()
-                .ok_or_else(|| anyhow!("找不到代理通道 {channel_id}"))?;
+                .ok_or_else(|| anyhow!("找不到代理 {channel_id}"))?;
             let effective_node = effective_node_for(&inner.config, &channel);
             (
                 channel.http_port,
@@ -947,7 +923,7 @@ impl AppManager {
                 .channels
                 .iter()
                 .find(|channel| channel.id == channel_id)
-                .ok_or_else(|| anyhow!("找不到代理通道 {channel_id}"))?;
+                .ok_or_else(|| anyhow!("找不到代理 {channel_id}"))?;
             effective_node_for(&inner.config, channel)
         };
         let result = self.select_channel_node(channel_id, &node).await;
@@ -1312,7 +1288,7 @@ fn validate_subscription_input(input: &SubscriptionInput) -> Result<()> {
 
 fn validate_channel_input(input: &ChannelInput) -> Result<()> {
     if input.name.trim().is_empty() {
-        bail!("通道名不能为空");
+        bail!("代理名不能为空");
     }
     Ok(())
 }
@@ -1649,3 +1625,4 @@ mod tests {
         assert_eq!(config.channels[0].mihomo_socks_port, 23003);
     }
 }
+

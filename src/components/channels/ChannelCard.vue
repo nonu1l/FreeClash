@@ -80,7 +80,7 @@ function runMenu(action: () => void) {
         <strong class="channel-traffic">{{ formatBytes(totalTraffic()) }}</strong>
       </div>
 
-      <label class="switch" title="切换通道代理链路" @click.stop>
+      <label class="switch" title="切换代理链路" @click.stop>
         <input
           type="checkbox"
           :checked="channel.enabled"
@@ -107,12 +107,12 @@ function runMenu(action: () => void) {
         <button type="button" title="诊断" @click.stop="emit('diagnose', channel)">
           <Stethoscope :size="16" />
         </button>
-        <button type="button" title="编辑通道" @click.stop="emit('edit', channel)">
+        <button type="button" title="编辑代理" @click.stop="emit('edit', channel)">
           <Edit3 :size="16" />
         </button>
         <button
           type="button"
-          title="复制通道"
+          title="复制代理"
           :disabled="busy === `duplicate-${channel.id}`"
           @click.stop="emit('duplicate', channel)"
         >
@@ -120,7 +120,7 @@ function runMenu(action: () => void) {
         </button>
         <button
           type="button"
-          title="删除通道"
+          title="删除代理"
           :disabled="busy === `delete-${channel.id}`"
           @click.stop="emit('delete', channel)"
         >
@@ -151,7 +151,7 @@ function runMenu(action: () => void) {
         </button>
         <button type="button" @click="runMenu(() => emit('duplicate', channel))">
           <Route :size="15" />
-          复制通道
+          复制代理
         </button>
         <button type="button" class="danger-item" @click="runMenu(() => emit('delete', channel))">
           <Trash2 :size="15" />

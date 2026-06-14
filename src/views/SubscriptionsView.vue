@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { Edit3, Plus, RefreshCw, Search, Server, Trash2 } from "@lucide/vue";
-import SubscriptionDialog from "../components/dialogs/SubscriptionDialog.vue";
+import { Import, RefreshCw, Search, Trash2 } from "@lucide/vue";
 import type { NodeInfo, Subscription, SubscriptionInput } from "../types";
 import { nodeDelayLabel } from "../utils/format";
 
@@ -9,8 +8,7 @@ const props = defineProps<{
   subscriptions: Subscription[];
   nodes: NodeInfo[];
   busy: string | null;
-  createSubscription: (input: SubscriptionInput) => Promise<void>;
-  updateSubscription: (id: string, input: SubscriptionInput) => Promise<void>;
+  createSubscription: (input: SubscriptionInput) => Promise<Subscription>;
   deleteSubscription: (id: string) => Promise<void>;
   refreshSubscription: (id: string) => Promise<void>;
   refreshNodes: () => Promise<void>;
@@ -21,10 +19,9 @@ const props = defineProps<{
   ) => Promise<boolean>;
 }>();
 
-const dialogOpen = ref(false);
-const editing = ref<Subscription | null>(null);
 const expandedId = ref<string | null>(null);
 const nodeQuery = ref("");
+const importUrl = ref("");
 
 const nodesBySubscription = computed(() => {
   const map = new Map<string, NodeInfo[]>();
@@ -46,22 +43,15 @@ function visibleNodes(subscriptionId: string) {
   );
 }
 
-function openCreate() {
-  editing.value = null;
-  dialogOpen.value = true;
-}
-
-function openEdit(subscription: Subscription) {
-  editing.value = subscription;
-  dialogOpen.value = true;
-}
-
-async function saveSubscription(input: SubscriptionInput) {
-  if (editing.value) {
-    await props.updateSubscription(editing.value.id, input);
-  } else {
-    await props.createSubscription(input);
-  }
+async function importSubscription() {
+  const url = importUrl.value.trim();
+  if (!url) return;
+  const subscription = await props.createSubscription({
+    name: subscriptionNameFromUrl(url),
+    url,
+  });
+  importUrl.value = "";
+  await props.refreshSubscription(subscription.id);
 }
 
 async function removeSubscription(subscription: Subscription) {
@@ -73,6 +63,24 @@ async function removeSubscription(subscription: Subscription) {
   if (!confirmed) return;
   await props.deleteSubscription(subscription.id);
 }
+
+function subscriptionNameFromUrl(value: string) {
+  let base = "订阅";
+  try {
+    const url = new URL(value);
+    base = url.hostname.replace(/^www\./, "") || base;
+  } catch {
+    const compact = value.replace(/^https?:\/\//, "").split(/[/?#]/)[0];
+    if (compact) base = compact;
+  }
+
+  const names = new Set(props.subscriptions.map((subscription) => subscription.name));
+  if (!names.has(base)) return base;
+
+  let index = 2;
+  while (names.has(`${base} ${index}`)) index += 1;
+  return `${base} ${index}`;
+}
 </script>
 
 <template>
@@ -81,25 +89,25 @@ async function removeSubscription(subscription: Subscription) {
       <div>
         <h2>订阅</h2>
       </div>
-      <div class="toolbar-actions">
-        <button type="button" :disabled="busy === 'refresh-nodes'" @click="refreshNodes">
+      <form class="subscription-import" @submit.prevent="importSubscription">
+        <input v-model="importUrl" type="url" placeholder="输入订阅地址" />
+        <button
+          class="primary"
+          type="submit"
+          title="导入订阅"
+          :disabled="busy === 'save-subscription' || !importUrl.trim()"
+        >
+          <Import :size="17" />
+        </button>
+        <button type="button" title="刷新全部" :disabled="busy === 'refresh-nodes'" @click="refreshNodes">
           <RefreshCw :size="17" />
-          刷新全部
         </button>
-        <button class="primary" type="button" @click="openCreate">
-          <Plus :size="17" />
-          新增订阅
-        </button>
-      </div>
+      </form>
     </header>
 
     <div v-if="subscriptions.length === 0" class="empty">
-      <Server :size="30" />
       <strong>还没有订阅</strong>
-      <button class="primary" type="button" @click="openCreate">
-        <Plus :size="17" />
-        新增订阅
-      </button>
+      <span>在顶部输入订阅地址后导入。</span>
     </div>
 
     <div v-else class="subscription-list">
@@ -123,9 +131,6 @@ async function removeSubscription(subscription: Subscription) {
             @click="refreshSubscription(subscription.id)"
           >
             <RefreshCw :size="16" />
-          </button>
-          <button type="button" title="编辑订阅" @click="openEdit(subscription)">
-            <Edit3 :size="16" />
           </button>
           <button
             type="button"
@@ -161,12 +166,4 @@ async function removeSubscription(subscription: Subscription) {
       </article>
     </div>
   </section>
-
-  <SubscriptionDialog
-    :open="dialogOpen"
-    :subscription="editing"
-    :busy="busy === 'save-subscription'"
-    :save-subscription="saveSubscription"
-    @close="dialogOpen = false"
-  />
 </template>

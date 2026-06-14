@@ -135,14 +135,6 @@ async fn dispatch(manager: &AppManager, command: &str, payload: Value) -> Result
                 .create_subscription(field(&payload, "input")?)
                 .await?,
         ),
-        "update_subscription" => to_value(
-            manager
-                .update_subscription(
-                    &field::<String>(&payload, "subscriptionId")?,
-                    field(&payload, "input")?,
-                )
-                .await?,
-        ),
         "delete_subscription" => {
             manager
                 .delete_subscription(&field::<String>(&payload, "subscriptionId")?)

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { Activity, Gauge, Network, RotateCcw } from "@lucide/vue";
+import { ArrowDown, ArrowUp, Link2, ListChecks, RotateCcw, Settings } from "@lucide/vue";
 import type { AppSnapshot } from "../../types";
 import { formatBytes, formatSpeed } from "../../utils/format";
 
@@ -28,62 +28,57 @@ const totalTraffic = computed(() =>
     0,
   ),
 );
+const globalProxyEnabled = computed(() => props.snapshot?.config.global_proxy_enabled ?? true);
+const coreRunning = computed(() => props.snapshot?.status.core_running ?? false);
 
-function onToggle(event: Event) {
-  emit("toggleGlobal", (event.target as HTMLInputElement).checked);
+function toggleGlobal() {
+  if (props.busy === "global-proxy") return;
+  emit("toggleGlobal", !globalProxyEnabled.value);
 }
 </script>
 
 <template>
   <section class="status-pane" aria-label="运行概览">
-    <div class="status-grid">
-      <div class="metric-card core-metric">
-        <div class="core-metric-main">
-          <span>核心</span>
-          <strong :class="snapshot?.status.core_running ? 'ok' : 'warn'">
-            {{ snapshot?.status.core_running ? "运行中" : "未运行" }}
-          </strong>
-        </div>
-        <div class="core-metric-actions">
-          <label class="switch" title="切换全局代理链路">
-            <input
-              type="checkbox"
-              :checked="snapshot?.config.global_proxy_enabled ?? true"
-              :disabled="busy === 'global-proxy'"
-              @change="onToggle"
-            />
-            <span></span>
-          </label>
-          <button
-            type="button"
-            title="重启 mihomo 核心"
-            :disabled="busy === 'restart'"
-            @click="emit('restartCore')"
-          >
-            <RotateCcw :size="15" />
-          </button>
-        </div>
+    <div class="status-strip">
+      <div class="status-tools">
+        <button
+          type="button"
+          class="status-icon-button link-toggle"
+          :class="{ active: globalProxyEnabled, running: coreRunning }"
+          :title="globalProxyEnabled ? '关闭代理链路' : '开启代理链路'"
+          :aria-pressed="globalProxyEnabled"
+          :disabled="busy === 'global-proxy'"
+          @click="toggleGlobal"
+        >
+          <Link2 :size="18" />
+        </button>
+        <button
+          type="button"
+          class="status-icon-button"
+          title="重启 mihomo 核心"
+          :disabled="busy === 'restart'"
+          @click="emit('restartCore')"
+        >
+          <RotateCcw :size="17" />
+        </button>
       </div>
-      <div class="metric-card">
-        <span>通道</span>
-        <strong>{{ enabledChannels }} / {{ channels.length }}</strong>
-      </div>
-      <div class="metric-line">
-        <Activity :size="16" />
-        <span>上传</span>
+
+      <div class="status-metric">
+        <ArrowUp :size="16" class="upload" />
         <strong>{{ formatSpeed(totalUploadSpeed) }}</strong>
       </div>
-      <div class="metric-line">
-        <Gauge :size="16" />
-        <span>下载</span>
+      <div class="status-metric">
+        <ArrowDown :size="16" class="download" />
         <strong>{{ formatSpeed(totalDownloadSpeed) }}</strong>
       </div>
-      <div class="metric-line">
-        <Network :size="16" />
-        <span>本次流量</span>
+      <div class="status-metric">
+        <Settings :size="15" class="traffic" />
         <strong>{{ formatBytes(totalTraffic) }}</strong>
       </div>
+      <div class="status-metric">
+        <ListChecks :size="15" />
+        <strong>{{ enabledChannels }} / {{ channels.length }}</strong>
+      </div>
     </div>
-
   </section>
 </template>

@@ -71,13 +71,13 @@ async function saveChannel(input: ChannelInput) {
 
 async function removeChannel(channel: ProxyChannel) {
   const confirmed = await props.confirmAction(
-    "删除通道",
-    `确定删除通道「${channel.name}」？删除后端口和统计记录也会随通道移除。`,
+    "删除代理",
+    `确定删除代理「${channel.name}」？删除后端口和统计记录也会随代理移除。`,
     { confirmText: "删除", danger: true },
   );
   if (!confirmed) return;
   await props.deleteChannel(channel.id);
-  props.notify("通道已删除");
+  props.notify("代理已删除");
 }
 
 async function openDiagnostics(channel: ProxyChannel) {
@@ -115,22 +115,22 @@ function selectChannel(channel: ProxyChannel) {
   <section class="view">
     <header class="view-header">
       <div>
-        <h2>代理通道</h2>
+        <h2>代理</h2>
       </div>
       <div class="toolbar-actions">
         <button class="primary" type="button" @click="openCreate">
           <Plus :size="17" />
-          新增通道
+          新增代理
         </button>
       </div>
     </header>
 
     <div v-if="channels.length === 0" class="empty">
       <Server :size="30" />
-      <strong>还没有代理通道</strong>
+      <strong>还没有代理</strong>
       <button class="primary" type="button" @click="openCreate">
         <Plus :size="17" />
-        新增通道
+        新增代理
       </button>
     </div>
 

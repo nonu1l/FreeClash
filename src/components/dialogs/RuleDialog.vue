@@ -85,7 +85,7 @@ async function submit() {
     <div v-if="open" class="modal-backdrop">
       <section class="modal wide-modal">
         <header class="modal-header">
-          <h3>{{ channel ? "编辑通道" : "新增通道" }}</h3>
+          <h3>{{ channel ? "编辑代理" : "新增代理" }}</h3>
           <button type="button" title="关闭" @click="emit('close')">
             <X :size="17" />
           </button>
@@ -93,7 +93,7 @@ async function submit() {
 
         <div class="form-grid">
           <label>
-            <span>通道名</span>
+            <span>代理名</span>
             <input v-model="draft.name" type="text" placeholder="Chrome 香港" />
           </label>
           <label>

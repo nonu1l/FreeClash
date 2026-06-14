@@ -130,11 +130,7 @@ function restartCore() {
 }
 
 async function createSubscription(input: SubscriptionInput) {
-  await runAction("save-subscription", () => freeClashApi.createSubscription(input));
-}
-
-async function updateSubscription(id: string, input: SubscriptionInput) {
-  await runAction("save-subscription", () => freeClashApi.updateSubscription(id, input));
+  return await runAction("save-subscription", () => freeClashApi.createSubscription(input));
 }
 
 async function deleteSubscription(id: string) {
@@ -254,7 +250,6 @@ onBeforeUnmount(() => {
         :nodes="nodes"
         :busy="busy"
         :create-subscription="createSubscription"
-        :update-subscription="updateSubscription"
         :delete-subscription="deleteSubscription"
         :refresh-subscription="refreshSubscription"
         :refresh-nodes="refreshNodes"
@@ -264,14 +259,14 @@ onBeforeUnmount(() => {
       <section v-else-if="activeView === 'connections'" class="view">
         <header class="view-header">
           <div>
-            <h2>连接记录</h2>
+            <h2>连接</h2>
             <p>最近目标和活动连接会在后续版本集中到这里。</p>
           </div>
         </header>
         <div class="empty compact-empty">
           <Activity :size="28" />
-          <strong>连接记录视图已预留</strong>
-          <span>当前可在通道诊断中查看最近访问目标。</span>
+          <strong>连接视图已预留</strong>
+          <span>当前可在代理诊断中查看最近访问目标。</span>
         </div>
       </section>
 

@@ -25,10 +25,10 @@ const totalTraffic = computed(() => {
 <template>
   <Teleport to="body">
     <div v-if="open" class="drawer-backdrop" @click.self="emit('close')">
-      <aside class="diagnostics-drawer" role="dialog" aria-modal="true" aria-label="通道诊断">
+      <aside class="diagnostics-drawer" role="dialog" aria-modal="true" aria-label="代理诊断">
         <header class="modal-header">
           <div>
-            <h3>{{ diagnostics?.channel_name || "通道诊断" }}</h3>
+            <h3>{{ diagnostics?.channel_name || "代理诊断" }}</h3>
             <p>{{ diagnostics?.http_url }} · {{ diagnostics?.socks_url }}</p>
           </div>
           <button type="button" title="关闭" @click="emit('close')">
@@ -73,7 +73,7 @@ const totalTraffic = computed(() => {
             <dd>{{ diagnostics.global_proxy_enabled ? "开启" : "本地直连" }}</dd>
           </div>
           <div>
-            <dt>通道 Switch</dt>
+            <dt>代理 Switch</dt>
             <dd>{{ diagnostics.channel_proxy_enabled ? "开启" : "本地直连" }}</dd>
           </div>
           <div>

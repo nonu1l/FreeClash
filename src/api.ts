@@ -24,7 +24,6 @@ const COMMANDS = {
   getState: "get_state",
   setSubscription: "set_subscription",
   createSubscription: "create_subscription",
-  updateSubscription: "update_subscription",
   deleteSubscription: "delete_subscription",
   refreshSubscription: "refresh_subscription",
   refreshNodes: "refresh_nodes",
@@ -48,7 +47,6 @@ export interface FreeClashApi {
   getState(): Promise<AppSnapshot>;
   setSubscription(url: string | null): Promise<void>;
   createSubscription(input: SubscriptionInput): Promise<Subscription>;
-  updateSubscription(subscriptionId: string, input: SubscriptionInput): Promise<Subscription>;
   deleteSubscription(subscriptionId: string): Promise<void>;
   refreshSubscription(subscriptionId: string): Promise<NodeInfo[]>;
   refreshNodes(): Promise<NodeInfo[]>;
@@ -74,8 +72,6 @@ export function createFreeClashApi(transport: ApiTransport = defaultTransport())
     getState: () => call(COMMANDS.getState),
     setSubscription: (url) => call(COMMANDS.setSubscription, { url }),
     createSubscription: (input) => call(COMMANDS.createSubscription, { input }),
-    updateSubscription: (subscriptionId, input) =>
-      call(COMMANDS.updateSubscription, { subscriptionId, input }),
     deleteSubscription: (subscriptionId) =>
       call(COMMANDS.deleteSubscription, { subscriptionId }),
     refreshSubscription: (subscriptionId) =>
