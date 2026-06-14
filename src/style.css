@@ -175,7 +175,7 @@ p {
 
 .app-shell {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: 236px minmax(0, 1fr);
   min-height: 100vh;
 }
 
@@ -237,7 +237,7 @@ p {
   flex-direction: column;
   gap: var(--fc-space-4);
   overflow: auto;
-  padding: 18px 16px;
+  padding: 18px 14px;
   border-right: 1px solid var(--fc-border);
   background: var(--fc-bg-subtle);
 }
@@ -273,17 +273,6 @@ p {
   color: var(--fc-brand);
   border-color: var(--fc-brand-border);
   background: var(--fc-brand-soft);
-}
-
-.side-nav button.planned {
-  justify-content: flex-start;
-}
-
-.side-nav button.planned small {
-  margin-left: auto;
-  color: var(--fc-text-subtle);
-  font-size: 11px;
-  font-weight: 650;
 }
 
 .status-pane {
@@ -1347,7 +1336,7 @@ p {
 
 @media (max-width: 1280px) {
   .app-shell {
-    grid-template-columns: 248px minmax(0, 1fr);
+    grid-template-columns: 220px minmax(0, 1fr);
   }
 
 }

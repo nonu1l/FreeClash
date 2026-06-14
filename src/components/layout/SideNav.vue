@@ -31,13 +31,11 @@ const emit = defineEmits<{
     </button>
     <button
       type="button"
-      class="planned"
-      disabled
-      title="后续版本提供独立连接视图"
+      :class="{ active: activeView === 'connections' }"
+      @click="emit('change', 'connections')"
     >
       <History :size="18" />
       连接
-      <small>规划中</small>
     </button>
     <button
       type="button"
