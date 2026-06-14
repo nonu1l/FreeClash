@@ -458,6 +458,28 @@ p {
   border-bottom: 0;
 }
 
+.settings-path-row {
+  grid-template-columns: 1fr;
+}
+
+.settings-path-row code {
+  display: block;
+  margin-top: 6px;
+  padding: 8px 10px;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--fc-border);
+  border-radius: var(--fc-radius-sm);
+  color: var(--fc-rail-text);
+  background: var(--fc-surface-muted);
+  font-family:
+    "Cascadia Mono",
+    "Consolas",
+    monospace;
+  font-size: 12px;
+  line-height: 18px;
+  user-select: text;
+}
+
 .settings-row.align-end {
   align-items: end;
 }

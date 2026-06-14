@@ -296,6 +296,20 @@ onBeforeUnmount(() => {
               复制 token
             </button>
           </div>
+
+          <div class="settings-row settings-path-row">
+            <div>
+              <strong>配置文件路径</strong>
+              <code>{{ snapshot?.status.config_path ?? "-" }}</code>
+            </div>
+          </div>
+
+          <div class="settings-row settings-path-row">
+            <div>
+              <strong>Clash 核心路径</strong>
+              <code>{{ snapshot?.status.core_path ?? "-" }}</code>
+            </div>
+          </div>
         </section>
       </section>
 
