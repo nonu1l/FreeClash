@@ -18,7 +18,7 @@ const emit = defineEmits<{
       :class="{ active: activeView === 'channels' }"
       @click="emit('change', 'channels')"
     >
-      <Wifi :size="18" stroke-width="2" />
+      <Wifi :size="18" stroke-width="2.2" />
       代理
     </button>
     <button
@@ -26,7 +26,7 @@ const emit = defineEmits<{
       :class="{ active: activeView === 'subscriptions' }"
       @click="emit('change', 'subscriptions')"
     >
-      <Server :size="18" stroke-width="2" />
+      <Server :size="18" stroke-width="2.2" />
       订阅
     </button>
     <button
@@ -34,7 +34,7 @@ const emit = defineEmits<{
       :class="{ active: activeView === 'settings' }"
       @click="emit('change', 'settings')"
     >
-      <Settings :size="18" stroke-width="2" />
+      <Settings :size="18" stroke-width="2.2" />
       设置
     </button>
   </nav>

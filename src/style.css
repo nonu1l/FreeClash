@@ -290,14 +290,14 @@ p {
   justify-content: flex-start;
   min-height: 40px;
   padding: 0 12px;
-  color: var(--fc-text-muted);
+  color: #4f6073;
   font-size: 15px;
-  font-weight: 500;
+  font-weight: 550;
   line-height: 1;
   border-color: transparent;
   border-radius: 10px;
   background: transparent;
-  letter-spacing: 0;
+  letter-spacing: 0.04em;
 }
 
 .side-nav button.active {
