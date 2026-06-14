@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { History, ListChecks, Rss, Settings } from "@lucide/vue";
+import { Globe2, Server, Settings, Wifi } from "@lucide/vue";
 import type { ActiveView } from "../../types";
 
 defineProps<{
@@ -18,7 +18,7 @@ const emit = defineEmits<{
       :class="{ active: activeView === 'channels' }"
       @click="emit('change', 'channels')"
     >
-      <ListChecks :size="18" />
+      <Wifi :size="24" stroke-width="2.7" />
       代理
     </button>
     <button
@@ -26,7 +26,7 @@ const emit = defineEmits<{
       :class="{ active: activeView === 'subscriptions' }"
       @click="emit('change', 'subscriptions')"
     >
-      <Rss :size="18" />
+      <Server :size="24" stroke-width="2.7" />
       订阅
     </button>
     <button
@@ -34,7 +34,7 @@ const emit = defineEmits<{
       :class="{ active: activeView === 'connections' }"
       @click="emit('change', 'connections')"
     >
-      <History :size="18" />
+      <Globe2 :size="24" stroke-width="2.7" />
       连接
     </button>
     <button
@@ -42,7 +42,7 @@ const emit = defineEmits<{
       :class="{ active: activeView === 'settings' }"
       @click="emit('change', 'settings')"
     >
-      <Settings :size="18" />
+      <Settings :size="24" stroke-width="2.7" />
       设置
     </button>
   </nav>
