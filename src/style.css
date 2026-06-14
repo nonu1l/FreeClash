@@ -383,7 +383,7 @@ p {
   color: var(--fc-rail-text);
   font-size: 18px;
   line-height: 24px;
-  font-weight: 550;
+  font-weight: 400;
   text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
