@@ -130,15 +130,25 @@ async function httpCall<T>(command: string, payload: Record<string, unknown>): P
 }
 
 function defaultTransport(): ApiTransport {
+  const queryTransport = getQueryParam("freeclashApiTransport");
+  if (queryTransport === "http" || queryTransport === "tauri") return queryTransport;
   const stored = localStorage.getItem("freeclashApiTransport");
   if (stored === "http" || stored === "tauri") return stored;
   return "__TAURI_INTERNALS__" in window ? "tauri" : "http";
 }
 
 function getHttpBaseUrl() {
+  const queryBaseUrl = getQueryParam("freeclashApiBaseUrl");
+  if (queryBaseUrl) return queryBaseUrl;
   return localStorage.getItem("freeclashApiBaseUrl") || "http://127.0.0.1:19290";
 }
 
 function getHttpToken() {
+  const queryToken = getQueryParam("freeclashApiToken");
+  if (queryToken) return queryToken;
   return localStorage.getItem("freeclashApiToken") || "";
+}
+
+function getQueryParam(name: string) {
+  return new URLSearchParams(window.location.search).get(name);
 }

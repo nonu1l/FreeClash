@@ -12,6 +12,7 @@ import type {
   NodeInfo,
   ProxyChannel,
 } from "../types";
+import { copyTextToClipboard } from "../utils/clipboard";
 
 const props = defineProps<{
   channels: ProxyChannel[];
@@ -98,8 +99,11 @@ function toggleChannel(channel: ProxyChannel, enabled: boolean) {
 }
 
 async function copyAddress(value: string) {
-  await navigator.clipboard.writeText(value);
-  props.notify("已复制代理地址");
+  if (await copyTextToClipboard(value)) {
+    props.notify("已复制代理地址");
+  } else {
+    props.notify("复制失败，请手动选择地址", "error");
+  }
 }
 
 function selectChannel(channel: ProxyChannel) {

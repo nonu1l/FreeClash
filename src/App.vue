@@ -7,6 +7,7 @@ import ConfirmDialog from "./components/common/ConfirmDialog.vue";
 import ToastHost from "./components/common/ToastHost.vue";
 import RulesView from "./views/RulesView.vue";
 import SubscriptionsView from "./views/SubscriptionsView.vue";
+import { copyTextToClipboard } from "./utils/clipboard";
 import type {
   ActiveView,
   AppSnapshot,
@@ -191,10 +192,10 @@ function applyHttpApiSettings() {
 async function copyHttpToken() {
   const token = snapshot.value?.config.http_api_token;
   if (!token) return;
-  await navigator.clipboard.writeText(token);
+  const copied = await copyTextToClipboard(token);
   localStorage.setItem("freeclashApiToken", token);
   localStorage.setItem("freeclashApiBaseUrl", `http://127.0.0.1:${settingsHttpPort.value}`);
-  notify("已复制 HTTP API token，并写入浏览器调试配置");
+  notify(copied ? "已复制 HTTP API token，并写入浏览器调试配置" : "已写入浏览器调试配置，复制 token 失败", copied ? "success" : "error");
 }
 
 watch(
