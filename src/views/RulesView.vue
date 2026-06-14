@@ -1,14 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import {
-  Copy,
-  Edit3,
-  Plus,
-  Route,
-  Server,
-  Stethoscope,
-  Trash2,
-} from "@lucide/vue";
+import { Plus, Server } from "@lucide/vue";
+import ChannelCard from "../components/channels/ChannelCard.vue";
 import RuleDialog from "../components/dialogs/RuleDialog.vue";
 import RuleDiagnosticsDialog from "../components/dialogs/RuleDiagnosticsDialog.vue";
 import type {
@@ -19,7 +12,6 @@ import type {
   NodeInfo,
   ProxyChannel,
 } from "../types";
-import { formatBytes, formatSpeed } from "../utils/format";
 
 const props = defineProps<{
   channels: ProxyChannel[];
@@ -50,18 +42,6 @@ const statsByChannel = computed(() => {
 
 function statFor(channel: ProxyChannel) {
   return statsByChannel.value.get(channel.id);
-}
-
-function selectedNode(channel: ProxyChannel) {
-  return channel.selected_node || "DIRECT";
-}
-
-function httpUrl(channel: ProxyChannel) {
-  return `http://127.0.0.1:${channel.http_port}`;
-}
-
-function socksUrl(channel: ProxyChannel) {
-  return `socks5://127.0.0.1:${channel.socks_port}`;
 }
 
 function openCreate() {
@@ -101,8 +81,8 @@ async function runDiagnosticsTest() {
   diagnostics.value = await props.diagnoseChannel(channelId);
 }
 
-function onToggleChannel(channel: ProxyChannel, event: Event) {
-  void props.setChannelEnabled(channel.id, (event.target as HTMLInputElement).checked);
+function toggleChannel(channel: ProxyChannel, enabled: boolean) {
+  void props.setChannelEnabled(channel.id, enabled);
 }
 
 async function copyAddress(value: string) {
@@ -137,92 +117,22 @@ function selectChannel(channel: ProxyChannel) {
       </button>
     </div>
 
-    <div v-else class="rules-table channels-table" role="table">
-      <div class="rules-row channels-row rules-head" role="row">
-        <span>通道名</span>
-        <span>节点</span>
-        <span>HTTP / SOCKS5 地址</span>
-        <span>速度</span>
-        <span>流量</span>
-        <span>Switch</span>
-        <span>操作</span>
-      </div>
-
-      <article
+    <div v-else class="channel-list" role="list">
+      <ChannelCard
         v-for="channel in channels"
         :key="channel.id"
-        class="rules-row channels-row"
-        :class="{ selected: selectedChannelId === channel.id }"
-        role="row"
-        @click="selectChannel(channel)"
-      >
-        <div class="rule-name-cell">
-          <strong :title="channel.name">{{ channel.name }}</strong>
-        </div>
-
-        <div class="node-cell">
-          <strong :title="selectedNode(channel)">{{ selectedNode(channel) }}</strong>
-        </div>
-
-        <div class="proxy-addresses">
-          <button type="button" title="复制 HTTP 代理地址" @click.stop="copyAddress(httpUrl(channel))">
-            <Copy :size="14" />
-            <span>{{ httpUrl(channel) }}</span>
-          </button>
-          <button type="button" title="复制 SOCKS5 代理地址" @click.stop="copyAddress(socksUrl(channel))">
-            <Copy :size="14" />
-            <span>{{ socksUrl(channel) }}</span>
-          </button>
-        </div>
-
-        <div>
-          <span class="speed-pair">
-            <strong>↑ {{ formatSpeed(statFor(channel)?.upload_speed ?? 0) }}</strong>
-            <strong>↓ {{ formatSpeed(statFor(channel)?.download_speed ?? 0) }}</strong>
-          </span>
-        </div>
-
-        <div>
-          <strong>{{ formatBytes((statFor(channel)?.upload_total ?? 0) + (statFor(channel)?.download_total ?? 0)) }}</strong>
-        </div>
-
-        <div>
-          <label class="switch" title="切换通道代理链路">
-            <input
-              type="checkbox"
-              :checked="channel.enabled"
-              :disabled="busy === `channel-enabled-${channel.id}`"
-              @change="onToggleChannel(channel, $event)"
-            />
-            <span></span>
-          </label>
-        </div>
-
-        <div class="row-actions">
-          <button type="button" title="诊断" @click.stop="openDiagnostics(channel)">
-            <Stethoscope :size="16" />
-          </button>
-          <button type="button" title="编辑通道" @click.stop="openEdit(channel)">
-            <Edit3 :size="16" />
-          </button>
-          <button
-            type="button"
-            title="复制通道"
-            :disabled="busy === `duplicate-${channel.id}`"
-            @click.stop="duplicateChannel(channel.id)"
-          >
-            <Route :size="16" />
-          </button>
-          <button
-            type="button"
-            title="删除通道"
-            :disabled="busy === `delete-${channel.id}`"
-            @click.stop="removeChannel(channel)"
-          >
-            <Trash2 :size="16" />
-          </button>
-        </div>
-      </article>
+        :channel="channel"
+        :stats="statFor(channel)"
+        :selected="selectedChannelId === channel.id"
+        :busy="busy"
+        @select="selectChannel"
+        @toggle="toggleChannel"
+        @copy-address="copyAddress"
+        @diagnose="openDiagnostics"
+        @edit="openEdit"
+        @duplicate="(item) => duplicateChannel(item.id)"
+        @delete="removeChannel"
+      />
     </div>
   </section>
 
