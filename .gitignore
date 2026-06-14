@@ -4,4 +4,6 @@ src-tauri/target
 src-tauri/gen
 .freeclash
 *.log
+.idea
 
+/.codex-run/
