@@ -1267,24 +1267,32 @@ fn save_config(path: &Path, config: &AppConfig) -> Result<()> {
 fn resolve_core_path(app: &AppHandle) -> Result<PathBuf> {
     let exe_name = "verge-mihomo.exe";
     let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let candidates = [
-        current_dir.join("core").join(exe_name),
-        current_dir
-            .parent()
-            .map(|parent| parent.join("core").join(exe_name))
-            .unwrap_or_else(|| current_dir.join("core").join(exe_name)),
-        app.path()
-            .resource_dir()
-            .unwrap_or_else(|_| current_dir.clone())
-            .join("core")
-            .join(exe_name),
-    ];
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(Path::to_path_buf))
+        .unwrap_or_else(|| current_dir.clone());
+    let resource_dir = app.path().resource_dir().ok();
 
-    candidates
+    let mut candidates = vec![
+        current_dir.join("core").join(exe_name),
+        current_dir.join("_up_").join("core").join(exe_name),
+        exe_dir.join("core").join(exe_name),
+        exe_dir.join("_up_").join("core").join(exe_name),
+    ];
+    if let Some(parent) = current_dir.parent() {
+        candidates.push(parent.join("core").join(exe_name));
+        candidates.push(parent.join("_up_").join("core").join(exe_name));
+    }
+    if let Some(resource_dir) = resource_dir {
+        candidates.push(resource_dir.join("core").join(exe_name));
+        candidates.push(resource_dir.join("_up_").join("core").join(exe_name));
+    }
+
+    Ok(candidates
         .iter()
         .find(|path| path.exists())
         .cloned()
-        .ok_or_else(|| anyhow!("未找到 mihomo 核心 core\\{exe_name}"))
+        .unwrap_or_else(|| current_dir.join("core").join(exe_name)))
 }
 
 fn validate_subscription_input(input: &SubscriptionInput) -> Result<()> {
