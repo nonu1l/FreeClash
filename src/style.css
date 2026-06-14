@@ -12,6 +12,7 @@
   --fc-text-muted: #64748b;
   --fc-text-subtle: #8792a2;
   --fc-text-inverse: #ffffff;
+  --fc-rail-text: #4f6073;
   --fc-brand: #176b63;
   --fc-brand-hover: #125950;
   --fc-brand-active: #0d453f;
@@ -182,7 +183,7 @@ p {
 
 .app-shell {
   display: grid;
-  grid-template-columns: 196px minmax(0, 1fr);
+  grid-template-columns: 180px minmax(0, 1fr);
   height: 100vh;
   overflow: hidden;
 }
@@ -290,7 +291,7 @@ p {
   justify-content: flex-start;
   min-height: 40px;
   padding: 0 12px 0 6px;
-  color: #4f6073;
+  color: var(--fc-rail-text);
   font-size: 15px;
   font-weight: 550;
   line-height: 1;
@@ -370,13 +371,13 @@ p {
   gap: 12px;
   min-width: 0;
   padding: 2px 4px;
-  color: var(--fc-text-muted);
+  color: var(--fc-rail-text);
 }
 
 .status-metric strong {
   margin-left: auto;
   overflow: hidden;
-  color: var(--fc-text);
+  color: var(--fc-rail-text);
   font-size: 18px;
   line-height: 24px;
   font-weight: 550;
@@ -386,19 +387,19 @@ p {
 }
 
 .status-metric svg {
-  color: var(--fc-info);
+  color: var(--fc-rail-text);
 }
 
 .status-metric svg.upload {
-  color: var(--fc-warning);
+  color: var(--fc-rail-text);
 }
 
 .status-metric svg.download {
-  color: var(--fc-info);
+  color: var(--fc-rail-text);
 }
 
 .status-metric svg.traffic {
-  color: var(--fc-text);
+  color: var(--fc-rail-text);
 }
 
 .http-api-box {
@@ -1409,7 +1410,7 @@ p {
 
 @media (max-width: 1280px) {
   .app-shell {
-    grid-template-columns: 188px minmax(0, 1fr);
+    grid-template-columns: 172px minmax(0, 1fr);
   }
 
 }
