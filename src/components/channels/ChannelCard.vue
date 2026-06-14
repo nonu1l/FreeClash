@@ -72,9 +72,12 @@ function runMenu(action: () => void) {
         <span :title="selectedNode()">{{ selectedNode() }}</span>
       </div>
 
-      <div class="channel-speed">
-        <strong>↑ {{ formatSpeed(stats?.upload_speed ?? 0) }}</strong>
-        <strong>↓ {{ formatSpeed(stats?.download_speed ?? 0) }}</strong>
+      <div class="channel-metrics">
+        <div class="channel-speed">
+          <strong>↑ {{ formatSpeed(stats?.upload_speed ?? 0) }}</strong>
+          <strong>↓ {{ formatSpeed(stats?.download_speed ?? 0) }}</strong>
+        </div>
+        <strong class="channel-traffic">{{ formatBytes(totalTraffic()) }}</strong>
       </div>
 
       <label class="switch" title="切换通道代理链路" @click.stop>
@@ -98,11 +101,6 @@ function runMenu(action: () => void) {
           <Copy :size="14" />
           <span>{{ socksUrl() }}</span>
         </button>
-      </div>
-
-      <div class="channel-traffic">
-        <span>流量</span>
-        <strong>{{ formatBytes(totalTraffic()) }}</strong>
       </div>
 
       <div class="row-actions channel-actions">

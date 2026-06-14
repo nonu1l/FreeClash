@@ -778,13 +778,13 @@ p {
 .channel-card-main,
 .channel-card-sub {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(160px, 0.55fr) 54px;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, auto) 54px;
   gap: var(--fc-space-3);
   align-items: center;
 }
 
 .channel-card-sub {
-  grid-template-columns: minmax(0, 1.15fr) minmax(120px, 0.35fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .channel-title {
@@ -796,17 +796,24 @@ p {
 .channel-title strong,
 .channel-title span,
 .channel-speed strong,
-.channel-traffic strong {
+.channel-traffic {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.channel-title span,
-.channel-traffic span {
+.channel-title span {
   color: var(--fc-text-muted);
   font-size: 12px;
   line-height: 16px;
+}
+
+.channel-metrics {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 28px;
 }
 
 .channel-speed {
@@ -839,12 +846,6 @@ p {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.channel-traffic {
-  display: grid;
-  justify-items: end;
-  gap: var(--fc-space-1);
 }
 
 .channel-actions {
@@ -1414,15 +1415,12 @@ p {
     grid-template-columns: 1fr;
   }
 
+  .channel-metrics,
   .channel-speed,
   .channel-addresses,
   .channel-actions {
     justify-content: flex-start;
     flex-wrap: wrap;
-  }
-
-  .channel-traffic {
-    justify-items: start;
   }
 
   .rules-table {
