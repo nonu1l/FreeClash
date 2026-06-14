@@ -64,18 +64,6 @@ async function saveSubscription(input: SubscriptionInput) {
   }
 }
 
-async function toggleSubscription(subscription: Subscription, enabled: boolean) {
-  await props.updateSubscription(subscription.id, {
-    name: subscription.name,
-    url: subscription.url,
-    enabled,
-  });
-}
-
-function onToggleSubscription(subscription: Subscription, event: Event) {
-  void toggleSubscription(subscription, (event.target as HTMLInputElement).checked);
-}
-
 async function removeSubscription(subscription: Subscription) {
   const confirmed = await props.confirmAction(
     "删除订阅",
@@ -117,15 +105,6 @@ async function removeSubscription(subscription: Subscription) {
     <div v-else class="subscription-list">
       <article v-for="subscription in subscriptions" :key="subscription.id" class="subscription-item">
         <div class="subscription-main">
-          <label class="switch" title="启用订阅">
-            <input
-              type="checkbox"
-              :checked="subscription.enabled"
-              :disabled="busy === 'save-subscription'"
-              @change="onToggleSubscription(subscription, $event)"
-            />
-            <span></span>
-          </label>
           <button
             class="text-button subscription-title"
             type="button"
