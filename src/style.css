@@ -215,7 +215,6 @@ p {
   background: var(--fc-brand);
 }
 
-.rail-link-panel span,
 .status-heading span,
 .status-row span,
 .metric-line span,
@@ -234,7 +233,6 @@ p {
   text-transform: uppercase;
 }
 
-.rail-link-panel strong,
 .metric-card strong {
   overflow: hidden;
   font-size: 14px;
@@ -257,21 +255,6 @@ p {
 
 .rail-brand {
   padding-bottom: var(--fc-space-2);
-}
-
-.rail-link-panel {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 46px;
-  gap: var(--fc-space-3);
-  align-items: center;
-  padding: var(--fc-space-3);
-  border: 1px solid var(--fc-border);
-  border-radius: var(--fc-radius-md);
-  background: var(--fc-surface);
-}
-
-.rail-link-panel .full-button {
-  grid-column: 1 / -1;
 }
 
 .workspace {
@@ -346,6 +329,30 @@ p {
 
 .metric-card.wide {
   border-right: 0;
+}
+
+.core-metric {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--fc-space-3);
+}
+
+.core-metric-main {
+  display: grid;
+  min-width: 0;
+  gap: var(--fc-space-1);
+}
+
+.core-metric-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--fc-space-2);
+}
+
+.core-metric-actions button {
+  width: 30px;
+  min-height: 28px;
+  padding: 0;
 }
 
 .metric-line {
