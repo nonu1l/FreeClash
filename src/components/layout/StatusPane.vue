@@ -1,20 +1,12 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import { Activity, Copy, Gauge, Network } from "@lucide/vue";
+import { computed } from "vue";
+import { Activity, Gauge, Network } from "@lucide/vue";
 import type { AppSnapshot } from "../../types";
 import { formatBytes, formatSpeed } from "../../utils/format";
 
 const props = defineProps<{
   snapshot: AppSnapshot | null;
-  busy: string | null;
 }>();
-
-const emit = defineEmits<{
-  setHttpApiConfig: [payload: { enabled: boolean; port: number }];
-}>();
-
-const httpPort = ref(19290);
-const apiExpanded = ref(false);
 
 const channels = computed(() => props.snapshot?.config.channels ?? []);
 const enabledChannels = computed(() => channels.value.filter((channel) => channel.enabled).length);
@@ -30,36 +22,6 @@ const totalTraffic = computed(() =>
     0,
   ),
 );
-
-watch(
-  () => props.snapshot?.config.http_api_port,
-  (port) => {
-    httpPort.value = port ?? 19290;
-  },
-  { immediate: true },
-);
-
-function onHttpToggle(event: Event) {
-  emit("setHttpApiConfig", {
-    enabled: (event.target as HTMLInputElement).checked,
-    port: httpPort.value,
-  });
-}
-
-function applyHttpPort() {
-  emit("setHttpApiConfig", {
-    enabled: props.snapshot?.config.http_api_enabled ?? false,
-    port: httpPort.value,
-  });
-}
-
-async function copyHttpToken() {
-  const token = props.snapshot?.config.http_api_token;
-  if (!token) return;
-  await navigator.clipboard.writeText(token);
-  localStorage.setItem("freeclashApiToken", token);
-  localStorage.setItem("freeclashApiBaseUrl", `http://127.0.0.1:${httpPort.value}`);
-}
 </script>
 
 <template>
@@ -98,32 +60,5 @@ async function copyHttpToken() {
       </div>
     </div>
 
-    <section class="http-api-box">
-      <button class="http-api-head" type="button" @click="apiExpanded = !apiExpanded">
-        <span>HTTP API</span>
-        <strong>{{ snapshot?.config.http_api_enabled ? "已开启" : "已关闭" }}</strong>
-      </button>
-      <div class="http-api-toggle">
-        <label class="switch" title="切换 HTTP API">
-          <input
-            type="checkbox"
-            :checked="snapshot?.config.http_api_enabled ?? false"
-            :disabled="busy === 'http-api'"
-            @change="onHttpToggle"
-          />
-          <span></span>
-        </label>
-        <input v-model.number="httpPort" type="number" min="1" max="65535" />
-        <button type="button" class="button secondary" :disabled="busy === 'http-api'" @click="applyHttpPort">
-          应用
-        </button>
-      </div>
-      <div v-if="apiExpanded" class="http-api-details">
-        <button type="button" class="button secondary full-button" title="复制 HTTP API token" @click="copyHttpToken">
-          <Copy :size="16" />
-          复制 token
-        </button>
-      </div>
-    </section>
   </section>
 </template>

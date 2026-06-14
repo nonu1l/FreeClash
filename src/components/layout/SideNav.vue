@@ -33,11 +33,13 @@ const emit = defineEmits<{
     <span class="nav-section">工具</span>
     <button
       type="button"
-      :class="{ active: activeView === 'connections' }"
-      @click="emit('change', 'connections')"
+      class="planned"
+      disabled
+      title="后续版本提供独立连接记录视图"
     >
       <History :size="18" />
       连接记录
+      <small>规划中</small>
     </button>
     <button
       type="button"

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import { Copy, Edit3, Route, Stethoscope, Trash2 } from "@lucide/vue";
 import type { ChannelStats, ProxyChannel } from "../../types";
 import { formatBytes, formatSpeed } from "../../utils/format";
@@ -20,6 +21,10 @@ const emit = defineEmits<{
   delete: [channel: ProxyChannel];
 }>();
 
+const menuOpen = ref(false);
+const menuX = ref(0);
+const menuY = ref(0);
+
 function selectedNode() {
   return props.channel.selected_node || "DIRECT";
 }
@@ -39,6 +44,18 @@ function totalTraffic() {
 function onToggle(event: Event) {
   emit("toggle", props.channel, (event.target as HTMLInputElement).checked);
 }
+
+function openMenu(event: MouseEvent) {
+  emit("select", props.channel);
+  menuX.value = Math.min(event.clientX, window.innerWidth - 220);
+  menuY.value = Math.min(event.clientY, window.innerHeight - 260);
+  menuOpen.value = true;
+}
+
+function runMenu(action: () => void) {
+  menuOpen.value = false;
+  action();
+}
 </script>
 
 <template>
@@ -47,6 +64,7 @@ function onToggle(event: Event) {
     :class="{ selected }"
     role="listitem"
     @click="emit('select', channel)"
+    @contextmenu.prevent="openMenu"
   >
     <div class="channel-card-main">
       <div class="channel-title">
@@ -113,4 +131,35 @@ function onToggle(event: Event) {
       </div>
     </div>
   </article>
+
+  <Teleport to="body">
+    <div v-if="menuOpen" class="context-menu-scrim" @click="menuOpen = false" @contextmenu.prevent="menuOpen = false">
+      <div class="context-menu" :style="{ left: `${menuX}px`, top: `${menuY}px` }" @click.stop>
+        <button type="button" @click="runMenu(() => emit('copyAddress', httpUrl()))">
+          <Copy :size="15" />
+          复制 HTTP 地址
+        </button>
+        <button type="button" @click="runMenu(() => emit('copyAddress', socksUrl()))">
+          <Copy :size="15" />
+          复制 SOCKS5 地址
+        </button>
+        <button type="button" @click="runMenu(() => emit('diagnose', channel))">
+          <Stethoscope :size="15" />
+          诊断
+        </button>
+        <button type="button" @click="runMenu(() => emit('edit', channel))">
+          <Edit3 :size="15" />
+          编辑
+        </button>
+        <button type="button" @click="runMenu(() => emit('duplicate', channel))">
+          <Route :size="15" />
+          复制通道
+        </button>
+        <button type="button" class="danger-item" @click="runMenu(() => emit('delete', channel))">
+          <Trash2 :size="15" />
+          删除
+        </button>
+      </div>
+    </div>
+  </Teleport>
 </template>

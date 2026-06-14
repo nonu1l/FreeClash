@@ -13,7 +13,6 @@ defineProps<{
 const emit = defineEmits<{
   changeView: [view: ActiveView];
   toggleGlobal: [enabled: boolean];
-  setHttpApiConfig: [enabled: boolean, port: number];
   restartCore: [];
 }>();
 
@@ -63,11 +62,7 @@ function onToggle(event: Event) {
         </button>
       </section>
 
-      <StatusPane
-        :snapshot="snapshot"
-        :busy="busy"
-        @set-http-api-config="emit('setHttpApiConfig', $event.enabled, $event.port)"
-      />
+      <StatusPane :snapshot="snapshot" />
     </aside>
 
     <section class="workspace">

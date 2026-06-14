@@ -14,6 +14,11 @@ const props = defineProps<{
   deleteSubscription: (id: string) => Promise<void>;
   refreshSubscription: (id: string) => Promise<void>;
   refreshNodes: () => Promise<void>;
+  confirmAction: (
+    title: string,
+    message: string,
+    options?: { confirmText?: string; danger?: boolean },
+  ) => Promise<boolean>;
 }>();
 
 const dialogOpen = ref(false);
@@ -72,7 +77,12 @@ function onToggleSubscription(subscription: Subscription, event: Event) {
 }
 
 async function removeSubscription(subscription: Subscription) {
-  if (!window.confirm(`删除订阅「${subscription.name}」？`)) return;
+  const confirmed = await props.confirmAction(
+    "删除订阅",
+    `确定删除订阅「${subscription.name}」？该订阅下的节点将从合并节点池移除。`,
+    { confirmText: "删除", danger: true },
+  );
+  if (!confirmed) return;
   await props.deleteSubscription(subscription.id);
 }
 </script>

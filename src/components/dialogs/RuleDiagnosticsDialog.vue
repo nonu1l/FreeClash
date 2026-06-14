@@ -24,8 +24,8 @@ const totalTraffic = computed(() => {
 
 <template>
   <Teleport to="body">
-    <div v-if="open" class="modal-backdrop">
-      <section class="modal wide-modal">
+    <div v-if="open" class="drawer-backdrop" @click.self="emit('close')">
+      <aside class="diagnostics-drawer" role="dialog" aria-modal="true" aria-label="通道诊断">
         <header class="modal-header">
           <div>
             <h3>{{ diagnostics?.channel_name || "通道诊断" }}</h3>
@@ -152,7 +152,7 @@ const totalTraffic = computed(() => {
             测试连接
           </button>
         </footer>
-      </section>
+      </aside>
     </div>
   </Teleport>
 </template>

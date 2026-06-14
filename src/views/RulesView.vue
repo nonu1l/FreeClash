@@ -25,6 +25,12 @@ const props = defineProps<{
   setChannelEnabled: (id: string, enabled: boolean) => Promise<void>;
   diagnoseChannel: (id: string) => Promise<ChannelDiagnostics>;
   testChannelProxy: (id: string) => Promise<ChannelProxyTestResult>;
+  notify: (message: string, tone?: "success" | "error" | "info") => void;
+  confirmAction: (
+    title: string,
+    message: string,
+    options?: { confirmText?: string; danger?: boolean },
+  ) => Promise<boolean>;
 }>();
 
 const dialogOpen = ref(false);
@@ -63,8 +69,14 @@ async function saveChannel(input: ChannelInput) {
 }
 
 async function removeChannel(channel: ProxyChannel) {
-  if (!window.confirm(`删除通道「${channel.name}」？`)) return;
+  const confirmed = await props.confirmAction(
+    "删除通道",
+    `确定删除通道「${channel.name}」？删除后端口和统计记录也会随通道移除。`,
+    { confirmText: "删除", danger: true },
+  );
+  if (!confirmed) return;
   await props.deleteChannel(channel.id);
+  props.notify("通道已删除");
 }
 
 async function openDiagnostics(channel: ProxyChannel) {
@@ -87,6 +99,7 @@ function toggleChannel(channel: ProxyChannel, enabled: boolean) {
 
 async function copyAddress(value: string) {
   await navigator.clipboard.writeText(value);
+  props.notify("已复制代理地址");
 }
 
 function selectChannel(channel: ProxyChannel) {
