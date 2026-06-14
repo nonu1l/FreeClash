@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
+use std::net::TcpListener as StdTcpListener;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::{Arc, Mutex as StdMutex};
@@ -258,11 +259,11 @@ impl AppManager {
     }
 
     pub async fn set_http_api_config(&self, enabled: bool, port: u16) -> Result<()> {
-        if port == 0 {
-            bail!("HTTP API 端口无效");
-        }
         {
             let mut inner = self.inner.lock().await;
+            let current_server_owns_port =
+                inner.http_shutdown.is_some() && inner.config.http_api_port == port;
+            validate_http_api_port(&inner.config, port, enabled, current_server_owns_port)?;
             inner.config.http_api_enabled = enabled;
             inner.config.http_api_port = port;
             inner.status_message = Some(if enabled {
@@ -561,11 +562,14 @@ impl AppManager {
             self.start_meter_servers().await?;
             self.start_core().await?;
             self.wait_for_core().await?;
+            let nodes = match self.fetch_nodes().await {
+                Ok(nodes) => {
+                    self.sanitize_channel_selections(&nodes).await?;
+                    nodes
+                }
+                Err(_) => vec![direct_node()],
+            };
             self.sync_channel_selections().await;
-            let nodes = self
-                .fetch_nodes()
-                .await
-                .unwrap_or_else(|_| vec![direct_node()]);
             let mut inner = self.inner.lock().await;
             inner.nodes = nodes;
             inner.status_message = Some("mihomo 核心已就绪".to_string());
@@ -883,9 +887,20 @@ impl AppManager {
 
     async fn refresh_node_cache(&self) -> Result<Vec<NodeInfo>> {
         let nodes = self.fetch_nodes().await?;
+        self.sanitize_channel_selections(&nodes).await?;
+        self.sync_channel_selections().await;
         let mut inner = self.inner.lock().await;
         inner.nodes = nodes.clone();
         Ok(nodes)
+    }
+
+    async fn sanitize_channel_selections(&self, nodes: &[NodeInfo]) -> Result<()> {
+        let mut inner = self.inner.lock().await;
+        if sanitize_channel_selected_nodes(&mut inner.config, nodes) {
+            inner.status_message = Some("部分代理节点已失效，已切换为 DIRECT".to_string());
+            save_config(&self.paths.app_config_path, &inner.config)?;
+        }
+        Ok(())
     }
 
     async fn sync_channel_selections(&self) {
@@ -1293,10 +1308,60 @@ fn validate_channel_input(input: &ChannelInput) -> Result<()> {
     Ok(())
 }
 
+fn validate_http_api_port(
+    config: &AppConfig,
+    port: u16,
+    enabled: bool,
+    current_server_owns_port: bool,
+) -> Result<()> {
+    if port == 0 {
+        bail!("HTTP API 端口无效");
+    }
+    if port == config.controller_port {
+        bail!("HTTP API 端口不能与 mihomo 控制端口 {port} 相同");
+    }
+    for channel in &config.channels {
+        if [
+            channel.http_port,
+            channel.socks_port,
+            channel.mihomo_http_port,
+            channel.mihomo_socks_port,
+        ]
+        .contains(&port)
+        {
+            bail!("HTTP API 端口 {port} 已被代理「{}」使用", channel.name);
+        }
+    }
+    if enabled && !current_server_owns_port {
+        let listener = StdTcpListener::bind(("127.0.0.1", port))
+            .with_context(|| format!("HTTP API 端口 {port} 已被占用"))?;
+        drop(listener);
+    }
+    Ok(())
+}
+
 fn normalize_node(node: Option<String>) -> Option<String> {
     node.map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .or_else(|| Some("DIRECT".to_string()))
+}
+
+fn sanitize_channel_selected_nodes(config: &mut AppConfig, nodes: &[NodeInfo]) -> bool {
+    let mut available = nodes
+        .iter()
+        .map(|node| node.name.as_str())
+        .collect::<HashSet<_>>();
+    available.insert("DIRECT");
+
+    let mut changed = false;
+    for channel in &mut config.channels {
+        let selected = selected_node_name(channel);
+        if !available.contains(selected.as_str()) {
+            channel.selected_node = Some("DIRECT".to_string());
+            changed = true;
+        }
+    }
+    changed
 }
 
 fn selected_node_name(channel: &ProxyChannel) -> String {
@@ -1592,6 +1657,57 @@ mod tests {
         config.global_proxy_enabled = false;
         assert_eq!(effective_node_for(&config, &channel), "DIRECT");
         assert_eq!(selected_node_name(&channel), "HK");
+    }
+
+    #[test]
+    fn rejects_http_api_port_conflicts() {
+        let mut config = AppConfig::default();
+        config.controller_port = 25000;
+        config.channels.push(ProxyChannel {
+            id: "one".into(),
+            name: "Chrome".into(),
+            selected_node: Some("HK".into()),
+            enabled: true,
+            http_port: 25001,
+            socks_port: 25002,
+            mihomo_http_port: 25003,
+            mihomo_socks_port: 25004,
+        });
+
+        assert!(validate_http_api_port(&config, 0, false, false).is_err());
+        assert!(validate_http_api_port(&config, 25000, false, false).is_err());
+        assert!(validate_http_api_port(&config, 25002, false, false).is_err());
+        assert!(validate_http_api_port(&config, 25005, false, false).is_ok());
+    }
+
+    #[test]
+    fn sanitizes_missing_selected_nodes() {
+        let mut config = AppConfig::default();
+        config.channels.push(ProxyChannel {
+            id: "one".into(),
+            name: "Chrome".into(),
+            selected_node: Some("Removed Node".into()),
+            enabled: true,
+            http_port: 25001,
+            socks_port: 25002,
+            mihomo_http_port: 25003,
+            mihomo_socks_port: 25004,
+        });
+        let nodes = vec![
+            direct_node(),
+            NodeInfo {
+                name: "HK".into(),
+                node_type: "Proxy".into(),
+                delay: None,
+                is_builtin: false,
+                provider_id: Some("sub".into()),
+                provider_name: Some("Sub".into()),
+            },
+        ];
+
+        assert!(sanitize_channel_selected_nodes(&mut config, &nodes));
+        assert_eq!(config.channels[0].selected_node.as_deref(), Some("DIRECT"));
+        assert!(!sanitize_channel_selected_nodes(&mut config, &nodes));
     }
 
     #[test]

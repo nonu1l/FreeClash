@@ -148,4 +148,4 @@ export interface ProxyEndpointResult {
 }
 
 export type NodeFilter = "all" | "available" | "untested" | "high";
-export type ActiveView = "subscriptions" | "channels" | "connections" | "settings";
+export type ActiveView = "subscriptions" | "channels" | "settings";

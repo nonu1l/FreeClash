@@ -36,7 +36,6 @@ const COMMANDS = {
   duplicateChannel: "duplicate_channel",
   setChannelNode: "set_channel_node",
   getChannelStats: "get_channel_stats",
-  listChannelConnections: "list_channel_connections",
   diagnoseChannel: "diagnose_channel",
   testChannelProxy: "test_channel_proxy",
   restartCore: "restart_core",
@@ -59,7 +58,6 @@ export interface FreeClashApi {
   duplicateChannel(channelId: string): Promise<ProxyChannel>;
   setChannelNode(channelId: string, node: string): Promise<void>;
   getChannelStats(): Promise<ChannelStats[]>;
-  listChannelConnections(channelId: string): Promise<AppSnapshot["stats"][number]["recent_targets"]>;
   diagnoseChannel(channelId: string): Promise<ChannelDiagnostics>;
   testChannelProxy(channelId: string): Promise<ChannelProxyTestResult>;
   restartCore(): Promise<void>;
@@ -87,8 +85,6 @@ export function createFreeClashApi(transport: ApiTransport = defaultTransport())
     duplicateChannel: (channelId) => call(COMMANDS.duplicateChannel, { channelId }),
     setChannelNode: (channelId, node) => call(COMMANDS.setChannelNode, { channelId, node }),
     getChannelStats: () => call(COMMANDS.getChannelStats),
-    listChannelConnections: (channelId) =>
-      call(COMMANDS.listChannelConnections, { channelId }),
     diagnoseChannel: (channelId) => call(COMMANDS.diagnoseChannel, { channelId }),
     testChannelProxy: (channelId) => call(COMMANDS.testChannelProxy, { channelId }),
     restartCore: () => call(COMMANDS.restartCore),

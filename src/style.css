@@ -176,7 +176,7 @@ p {
 
 .app-shell {
   display: grid;
-  grid-template-columns: 232px minmax(0, 1fr);
+  grid-template-columns: 196px minmax(0, 1fr);
   min-height: 100vh;
 }
 
@@ -192,8 +192,8 @@ p {
 }
 
 .rail-brand h1 {
-  font-size: 18px;
-  line-height: 24px;
+  font-size: 17px;
+  line-height: 22px;
   font-weight: 600;
 }
 
@@ -207,8 +207,8 @@ p {
 
 .brand-mark {
   display: grid;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   flex: 0 0 auto;
   place-items: center;
   border-radius: var(--fc-radius-md);
@@ -236,15 +236,15 @@ p {
   min-height: 0;
   min-width: 0;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
   overflow: auto;
-  padding: 18px 16px;
+  padding: 16px 14px;
   border-right: 1px solid var(--fc-border);
   background: var(--fc-bg-subtle);
 }
 
 .rail-brand {
-  padding: 2px 2px 8px;
+  padding: 2px 2px 6px;
 }
 
 .workspace {
@@ -252,22 +252,22 @@ p {
   min-width: 0;
   flex-direction: column;
   gap: 12px;
-  padding: 18px 22px;
+  padding: 16px 18px;
   overflow: auto;
 }
 
 .side-nav {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .side-nav button {
-  gap: 14px;
+  gap: 10px;
   justify-content: flex-start;
-  min-height: 48px;
-  padding: 0 16px;
+  min-height: 40px;
+  padding: 0 12px;
   color: var(--fc-text-muted);
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 500;
   line-height: 1;
   border-color: transparent;
@@ -1361,7 +1361,7 @@ p {
 
 @media (max-width: 1280px) {
   .app-shell {
-    grid-template-columns: 220px minmax(0, 1fr);
+    grid-template-columns: 188px minmax(0, 1fr);
   }
 
 }

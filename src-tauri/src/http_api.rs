@@ -194,17 +194,6 @@ async fn dispatch(manager: &AppManager, command: &str, payload: Value) -> Result
             let state = manager.get_state().await?;
             to_value(state.stats)
         }
-        "list_channel_connections" => {
-            let channel_id = field::<String>(&payload, "channelId")?;
-            let state = manager.get_state().await?;
-            let connections = state
-                .stats
-                .into_iter()
-                .find(|stats| stats.channel_id == channel_id)
-                .map(|stats| stats.recent_targets)
-                .unwrap_or_default();
-            to_value(connections)
-        }
         "diagnose_channel" => to_value(
             manager
                 .diagnose_channel(&field::<String>(&payload, "channelId")?)

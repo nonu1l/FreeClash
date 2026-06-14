@@ -168,25 +168,6 @@ async fn get_channel_stats(manager: State<'_, AppManager>) -> Result<Vec<Channel
 }
 
 #[tauri::command]
-async fn list_channel_connections(
-    manager: State<'_, AppManager>,
-    channel_id: String,
-) -> Result<Vec<models::ChannelConnection>, String> {
-    manager
-        .get_state()
-        .await
-        .map(|state| {
-            state
-                .stats
-                .into_iter()
-                .find(|stats| stats.channel_id == channel_id)
-                .map(|stats| stats.recent_targets)
-                .unwrap_or_default()
-        })
-        .map_err(display_error)
-}
-
-#[tauri::command]
 async fn diagnose_channel(
     manager: State<'_, AppManager>,
     channel_id: String,
@@ -254,7 +235,6 @@ pub fn run() {
             duplicate_channel,
             set_channel_node,
             get_channel_stats,
-            list_channel_connections,
             diagnose_channel,
             test_channel_proxy,
             restart_core,
