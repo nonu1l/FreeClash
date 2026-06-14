@@ -39,10 +39,6 @@ const totalTraffic = computed(() =>
         <span>通道</span>
         <strong>{{ enabledChannels }} / {{ channels.length }}</strong>
       </div>
-      <div class="metric-card wide">
-        <span>当前速度</span>
-        <strong>{{ formatSpeed(totalUploadSpeed + totalDownloadSpeed) }}</strong>
-      </div>
       <div class="metric-line">
         <Activity :size="16" />
         <span>上传</span>
