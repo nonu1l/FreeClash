@@ -746,6 +746,19 @@ impl AppManager {
     async fn wait_for_core(&self) -> Result<()> {
         let mut last_error = None;
         for _ in 0..30 {
+            {
+                let mut inner = self.inner.lock().await;
+                if let Some(child) = inner.core.as_mut() {
+                    if let Some(status) =
+                        child.try_wait().context("检查 mihomo 核心进程状态失败")?
+                    {
+                        inner.core = None;
+                        inner.core_version = None;
+                        bail!("mihomo 核心已退出：{status}");
+                    }
+                }
+            }
+
             match self
                 .mihomo_request(reqwest::Method::GET, "/version", None)
                 .await
@@ -1574,7 +1587,11 @@ fn used_ports(config: &AppConfig) -> HashSet<u16> {
 }
 
 fn port_is_usable(port: u16, reserved: &HashSet<u16>) -> bool {
-    !reserved.contains(&port) && portpicker::is_free_tcp(port)
+    !reserved.contains(&port) && local_port_is_free(port)
+}
+
+fn local_port_is_free(port: u16) -> bool {
+    StdTcpListener::bind(("127.0.0.1", port)).is_ok()
 }
 
 fn allocate_available_port(start: u16, reserved: &mut HashSet<u16>) -> u16 {
@@ -1582,7 +1599,7 @@ fn allocate_available_port(start: u16, reserved: &mut HashSet<u16>) -> u16 {
         if reserved.contains(&port) {
             continue;
         }
-        if portpicker::is_free_tcp(port) {
+        if local_port_is_free(port) {
             reserved.insert(port);
             return port;
         }
@@ -1640,6 +1657,14 @@ mod tests {
         });
         let ports = allocate_channel_ports(&config);
         assert_eq!(ports, [22004, 22005, 22006, 22007]);
+    }
+
+    #[test]
+    fn port_usable_detects_bound_local_port() {
+        let listener = StdTcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        assert!(!port_is_usable(port, &HashSet::new()));
     }
 
     #[test]
@@ -1745,4 +1770,3 @@ mod tests {
         assert_eq!(config.channels[0].mihomo_socks_port, 23003);
     }
 }
-

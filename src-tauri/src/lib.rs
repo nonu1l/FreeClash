@@ -12,6 +12,7 @@ use models::{
     AppSnapshot, ChannelDiagnostics, ChannelInput, ChannelProxyTestResult, ChannelStats,
     DelayResult, NodeInfo, SubscriptionInput,
 };
+use tauri::image::Image;
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{Manager, RunEvent, State, WindowEvent};
@@ -305,7 +306,9 @@ fn setup_tray(app: &tauri::App, global_proxy_enabled: bool) -> tauri::Result<()>
             _ => {}
         });
 
-    if let Some(icon) = app.default_window_icon().cloned() {
+    if let Ok(icon) = Image::from_bytes(include_bytes!("../icons/tray.ico")) {
+        tray = tray.icon(icon);
+    } else if let Some(icon) = app.default_window_icon().cloned() {
         tray = tray.icon(icon);
     }
     tray.build(app)?;
