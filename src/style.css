@@ -374,8 +374,8 @@ p {
   margin-left: auto;
   overflow: hidden;
   color: var(--fc-rail-text);
-  font-size: 18px;
-  line-height: 24px;
+  font-size: 16px;
+  line-height: 22px;
   font-weight: 400;
   text-align: right;
   text-overflow: ellipsis;
