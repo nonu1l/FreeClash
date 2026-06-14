@@ -44,7 +44,7 @@
 
 body {
   margin: 0;
-  min-width: 960px;
+  min-width: 820px;
   min-height: 100vh;
   color: var(--fc-text);
   background: var(--fc-bg);
@@ -852,17 +852,20 @@ p {
 }
 
 .channel-addresses {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(148px, 170px));
   min-width: 0;
   gap: var(--fc-space-2);
+  justify-content: flex-start;
 }
 
 .channel-addresses button {
   min-width: 0;
-  flex: 1 1 0;
+  min-height: 26px;
   justify-content: flex-start;
-  height: 28px;
+  height: 26px;
   padding: 0 var(--fc-space-2);
+  font-size: 12px;
   background: var(--fc-surface);
 }
 
@@ -1366,7 +1369,7 @@ p {
 
 }
 
-@media (max-width: 960px) {
+@media (max-width: 820px) {
   body {
     min-width: 0;
   }
