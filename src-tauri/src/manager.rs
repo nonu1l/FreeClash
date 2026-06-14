@@ -729,7 +729,8 @@ impl AppManager {
             )
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::null());
+            .stderr(Stdio::null())
+            .kill_on_drop(true);
 
         #[cfg(windows)]
         {

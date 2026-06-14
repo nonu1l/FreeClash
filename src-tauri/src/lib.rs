@@ -237,13 +237,12 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building FreeClash")
-        .run(|app_handle, event| {
-            if let RunEvent::WindowEvent {
+        .run(|app_handle, event| match event {
+            RunEvent::WindowEvent {
                 label,
                 event: WindowEvent::CloseRequested { api, .. },
                 ..
-            } = event
-            {
+            } => {
                 let exiting = app_handle.state::<AppExit>().exiting.load(Ordering::SeqCst);
                 if !exiting {
                     api.prevent_close();
@@ -252,6 +251,22 @@ pub fn run() {
                     }
                 }
             }
+            RunEvent::ExitRequested { api, .. } => {
+                let exiting = app_handle
+                    .state::<AppExit>()
+                    .exiting
+                    .swap(true, Ordering::SeqCst);
+                if !exiting {
+                    api.prevent_exit();
+                    let manager = app_handle.state::<AppManager>().inner().clone();
+                    let app_handle = app_handle.clone();
+                    tauri::async_runtime::spawn(async move {
+                        manager.shutdown().await;
+                        app_handle.exit(0);
+                    });
+                }
+            }
+            _ => {}
         });
 }
 
