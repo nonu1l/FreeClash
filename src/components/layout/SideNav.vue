@@ -19,7 +19,7 @@ const emit = defineEmits<{
       @click="emit('change', 'channels')"
     >
       <Wifi :size="18" stroke-width="2.2" />
-      代理
+      <span class="side-nav-label">代理</span>
     </button>
     <button
       type="button"
@@ -27,7 +27,7 @@ const emit = defineEmits<{
       @click="emit('change', 'subscriptions')"
     >
       <Server :size="18" stroke-width="2.2" />
-      订阅
+      <span class="side-nav-label">订阅</span>
     </button>
     <button
       type="button"
@@ -35,7 +35,7 @@ const emit = defineEmits<{
       @click="emit('change', 'settings')"
     >
       <Settings :size="18" stroke-width="2.2" />
-      设置
+      <span class="side-nav-label">设置</span>
     </button>
   </nav>
 </template>

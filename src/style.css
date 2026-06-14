@@ -286,10 +286,10 @@ p {
 }
 
 .side-nav button {
-  gap: 14px;
+  gap: 10px;
   justify-content: flex-start;
   min-height: 40px;
-  padding: 0 12px 0 18px;
+  padding: 0 12px;
   color: #4f6073;
   font-size: 15px;
   font-weight: 550;
@@ -297,7 +297,12 @@ p {
   border-color: transparent;
   border-radius: 10px;
   background: transparent;
-  letter-spacing: 0.04em;
+}
+
+.side-nav-label {
+  display: inline-block;
+  margin-left: 6px;
+  letter-spacing: 0.08em;
 }
 
 .side-nav button.active {
