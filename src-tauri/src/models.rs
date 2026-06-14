@@ -59,15 +59,12 @@ pub struct Subscription {
     pub id: String,
     pub name: String,
     pub url: String,
-    #[serde(default = "default_channel_enabled")]
-    pub enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubscriptionInput {
     pub name: String,
     pub url: String,
-    pub enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

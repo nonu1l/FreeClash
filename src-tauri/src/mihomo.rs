@@ -88,7 +88,7 @@ pub fn render_config(config: &AppConfig) -> anyhow::Result<String> {
     for subscription in config
         .subscriptions
         .iter()
-        .filter(|subscription| subscription.enabled && !subscription.url.trim().is_empty())
+        .filter(|subscription| !subscription.url.trim().is_empty())
     {
         let name = provider_name(&subscription.id);
         providers.insert(
@@ -173,7 +173,6 @@ mod tests {
             id: "sub1".into(),
             name: "Sub 1".into(),
             url: "https://example.com/sub".into(),
-            enabled: true,
         });
         config.channels.push(ProxyChannel {
             id: "abc".into(),

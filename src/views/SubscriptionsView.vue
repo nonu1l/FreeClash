@@ -119,7 +119,7 @@ async function removeSubscription(subscription: Subscription) {
           <button
             type="button"
             title="刷新订阅"
-            :disabled="!subscription.enabled || busy === `refresh-subscription-${subscription.id}`"
+            :disabled="busy === `refresh-subscription-${subscription.id}`"
             @click="refreshSubscription(subscription.id)"
           >
             <RefreshCw :size="16" />

@@ -13,13 +13,11 @@ export interface Subscription {
   id: string;
   name: string;
   url: string;
-  enabled: boolean;
 }
 
 export interface SubscriptionInput {
   name: string;
   url: string;
-  enabled: boolean;
 }
 
 export interface AppConfig {
@@ -94,7 +92,6 @@ export interface SubscriptionDraft {
   id?: string;
   name: string;
   url: string;
-  enabled: boolean;
 }
 
 export interface DelayResult {

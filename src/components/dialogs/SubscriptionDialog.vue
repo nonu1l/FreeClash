@@ -17,7 +17,6 @@ const emit = defineEmits<{
 const draft = reactive<SubscriptionInput>({
   name: "",
   url: "",
-  enabled: true,
 });
 
 watch(
@@ -26,7 +25,6 @@ watch(
     if (!props.open) return;
     draft.name = props.subscription?.name ?? "";
     draft.url = props.subscription?.url ?? "";
-    draft.enabled = props.subscription?.enabled ?? true;
   },
   { immediate: true },
 );
@@ -35,7 +33,6 @@ async function submit() {
   await props.saveSubscription({
     name: draft.name.trim(),
     url: draft.url.trim(),
-    enabled: draft.enabled,
   });
   emit("close");
 }
@@ -60,10 +57,6 @@ async function submit() {
           <label>
             <span>订阅地址</span>
             <textarea v-model="draft.url" rows="5" spellcheck="false" placeholder="https://example.com/sub"></textarea>
-          </label>
-          <label class="toggle-row">
-            <input v-model="draft.enabled" type="checkbox" />
-            <span>启用订阅</span>
           </label>
         </div>
 

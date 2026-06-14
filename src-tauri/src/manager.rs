@@ -156,7 +156,6 @@ impl AppManager {
                 Some(url) => {
                     if let Some(subscription) = inner.config.subscriptions.first_mut() {
                         subscription.url = url;
-                        subscription.enabled = true;
                         if subscription.name.trim().is_empty() {
                             subscription.name = "默认订阅".to_string();
                         }
@@ -165,7 +164,6 @@ impl AppManager {
                             id: "default".to_string(),
                             name: "默认订阅".to_string(),
                             url,
-                            enabled: true,
                         });
                     }
                 }
@@ -184,7 +182,6 @@ impl AppManager {
                 id: short_id(),
                 name: input.name.trim().to_string(),
                 url: input.url.trim().to_string(),
-                enabled: input.enabled,
             };
             inner.config.subscriptions.push(subscription.clone());
             inner.config.subscription_url = None;
@@ -211,7 +208,6 @@ impl AppManager {
                 .ok_or_else(|| anyhow!("找不到订阅 {subscription_id}"))?;
             subscription.name = input.name.trim().to_string();
             subscription.url = input.url.trim().to_string();
-            subscription.enabled = input.enabled;
             let updated = subscription.clone();
             save_config(&self.paths.app_config_path, &inner.config)?;
             updated
@@ -248,9 +244,6 @@ impl AppManager {
                 .cloned()
                 .ok_or_else(|| anyhow!("找不到订阅 {subscription_id}"))?
         };
-        if !subscription.enabled {
-            bail!("订阅已关闭：{}", subscription.name);
-        }
         self.refresh_provider(&subscription).await?;
         self.refresh_node_cache().await
     }
@@ -263,7 +256,6 @@ impl AppManager {
                 .config
                 .subscriptions
                 .iter()
-                .filter(|subscription| subscription.enabled)
                 .cloned()
                 .collect::<Vec<_>>()
         };
@@ -1266,7 +1258,6 @@ fn migrate_config(config: &mut AppConfig) -> bool {
                 id: "default".to_string(),
                 name: "默认订阅".to_string(),
                 url,
-                enabled: true,
             });
             changed = true;
         }
