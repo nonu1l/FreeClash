@@ -50,6 +50,7 @@ const stats = computed(() => snapshot.value?.stats ?? []);
 const visibleStatusMessage = computed(() => {
   const message = snapshot.value?.status.message?.trim();
   if (!message || message === "mihomo 核心已就绪") return null;
+  if (message.startsWith("全局代理链路已")) return null;
   return message;
 });
 

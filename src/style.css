@@ -845,8 +845,7 @@ p {
 
 .channel-title strong,
 .channel-title span,
-.channel-speed strong,
-.channel-traffic {
+.channel-metric-tag strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -859,22 +858,46 @@ p {
 }
 
 .channel-metrics {
-  display: flex;
+  display: grid;
+  grid-template-columns: 104px 104px 94px;
   min-width: 0;
   align-items: center;
   justify-content: flex-end;
-  gap: 22px;
+  gap: 8px;
 }
 
-.channel-speed {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--fc-space-3);
+.channel-metric-tag {
+  display: inline-flex;
+  width: 100%;
+  min-width: 0;
+  height: 26px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 1px solid var(--fc-border);
+  border-radius: var(--fc-radius-sm);
+  color: var(--fc-rail-text);
+  background: var(--fc-surface-muted);
 }
 
-.channel-speed strong {
+.channel-metric-tag strong {
+  min-width: 0;
+  flex: 1;
   font-size: 13px;
   line-height: 18px;
+  font-weight: 500;
+  text-align: right;
+}
+
+.channel-metric-tag svg {
+  flex: 0 0 auto;
+  color: var(--fc-rail-text);
+}
+
+.channel-metric-tag svg.upload,
+.channel-metric-tag svg.download,
+.channel-metric-tag svg.traffic {
+  color: var(--fc-rail-text);
 }
 
 .channel-toggle {
@@ -1505,11 +1528,13 @@ p {
   }
 
   .channel-metrics,
-  .channel-speed,
   .channel-addresses,
   .channel-actions {
     justify-content: flex-start;
-    flex-wrap: wrap;
+  }
+
+  .channel-metrics {
+    grid-template-columns: repeat(3, minmax(94px, 104px));
   }
 
   .rules-table {

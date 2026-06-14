@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { Copy, Edit3, Route, Stethoscope, Trash2, Zap } from "@lucide/vue";
+import { ArrowDown, ArrowUp, Copy, Edit3, Route, Settings, Stethoscope, Trash2, Zap } from "@lucide/vue";
 import type { ChannelStats, ProxyChannel } from "../../types";
 import { formatBytes, formatSpeed } from "../../utils/format";
 
@@ -73,11 +73,18 @@ function runMenu(action: () => void) {
       </div>
 
       <div class="channel-metrics">
-        <div class="channel-speed">
-          <strong>↑ {{ formatSpeed(stats?.upload_speed ?? 0) }}</strong>
-          <strong>↓ {{ formatSpeed(stats?.download_speed ?? 0) }}</strong>
-        </div>
-        <strong class="channel-traffic">{{ formatBytes(totalTraffic()) }}</strong>
+        <span class="channel-metric-tag" title="上行速度">
+          <ArrowUp :size="14" class="upload" />
+          <strong>{{ formatSpeed(stats?.upload_speed ?? 0) }}</strong>
+        </span>
+        <span class="channel-metric-tag" title="下行速度">
+          <ArrowDown :size="14" class="download" />
+          <strong>{{ formatSpeed(stats?.download_speed ?? 0) }}</strong>
+        </span>
+        <span class="channel-metric-tag traffic" title="总流量">
+          <Settings :size="14" class="traffic" />
+          <strong>{{ formatBytes(totalTraffic()) }}</strong>
+        </span>
       </div>
 
       <button
