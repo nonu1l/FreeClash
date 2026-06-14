@@ -74,7 +74,7 @@ async function submit() {
   await props.saveChannel({
     name: draft.name.trim(),
     selected_node: draft.selected_node || "DIRECT",
-    enabled: draft.enabled,
+    enabled: props.channel?.enabled ?? true,
   });
   emit("close");
 }
@@ -83,7 +83,7 @@ async function submit() {
 <template>
   <Teleport to="body">
     <div v-if="open" class="modal-backdrop">
-      <section class="modal wide-modal">
+      <section class="modal channel-modal">
         <header class="modal-header">
           <h3>{{ channel ? "编辑代理" : "新增代理" }}</h3>
           <button type="button" title="关闭" @click="emit('close')">
@@ -95,16 +95,6 @@ async function submit() {
           <label>
             <span>代理名</span>
             <input v-model="draft.name" type="text" placeholder="Chrome 香港" />
-          </label>
-          <label>
-            <span>代理开关</span>
-            <span class="inline-switch">
-              <label class="switch">
-                <input v-model="draft.enabled" type="checkbox" />
-                <span></span>
-              </label>
-              {{ draft.enabled ? "节点模式" : "本地直连" }}
-            </span>
           </label>
 
           <div class="node-picker wide">
@@ -129,7 +119,7 @@ async function submit() {
 
             <label>
               <span>选择节点</span>
-              <select v-model="draft.selected_node" size="9">
+              <select v-model="draft.selected_node" size="7">
                 <optgroup v-for="group in groupedNodes" :key="group.name" :label="group.name">
                   <option v-for="node in group.nodes" :key="node.name" :value="node.name">
                     {{ node.name }} · {{ nodeDelayLabel(node.delay) }}

@@ -1088,6 +1088,22 @@ p {
   width: min(900px, 100%);
 }
 
+.channel-modal {
+  width: min(520px, calc(100vw - 32px));
+  gap: var(--fc-space-3);
+  padding: 14px;
+}
+
+.channel-modal .form-grid {
+  grid-template-columns: 1fr;
+  gap: var(--fc-space-3);
+}
+
+.channel-modal .node-picker-head {
+  grid-template-columns: minmax(0, 1fr) 132px;
+  gap: var(--fc-space-2);
+}
+
 .modal-header {
   align-items: flex-start;
   justify-content: space-between;
