@@ -1,12 +1,13 @@
 :root {
-  --fc-bg: #f4f7f9;
-  --fc-bg-subtle: #edf2f6;
+  --fc-bg: #f3f6f8;
+  --fc-bg-subtle: #eef3f6;
   --fc-surface: #ffffff;
   --fc-surface-muted: #f8fafc;
+  --fc-surface-hover: #f2f6f8;
   --fc-surface-raised: #ffffff;
-  --fc-border: #d8e0e8;
-  --fc-border-strong: #bcc8d4;
-  --fc-divider: #e6edf3;
+  --fc-border: #dce4ec;
+  --fc-border-strong: #c6d0da;
+  --fc-divider: #e8eef4;
   --fc-text: #172033;
   --fc-text-muted: #64748b;
   --fc-text-subtle: #8792a2;
@@ -24,8 +25,8 @@
   --fc-warning-soft: #fff3d6;
   --fc-danger: #b42318;
   --fc-danger-soft: #fff0ef;
-  --fc-shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
-  --fc-shadow-md: 0 8px 24px rgba(16, 24, 40, 0.10);
+  --fc-shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --fc-shadow-md: 0 10px 24px rgba(16, 24, 40, 0.10);
   --fc-radius-xs: 4px;
   --fc-radius-sm: 6px;
   --fc-radius-md: 8px;
@@ -71,7 +72,7 @@ button {
   align-items: center;
   justify-content: center;
   gap: var(--fc-space-2);
-  min-height: 34px;
+  min-height: 32px;
   border: 1px solid var(--fc-border-strong);
   border-radius: var(--fc-radius-sm);
   color: var(--fc-text);
@@ -152,7 +153,7 @@ textarea {
 
 input,
 select {
-  height: 36px;
+  height: 34px;
   padding: 0 var(--fc-space-3);
 }
 
@@ -175,7 +176,7 @@ p {
 
 .app-shell {
   display: grid;
-  grid-template-columns: 252px minmax(0, 1fr);
+  grid-template-columns: 232px minmax(0, 1fr);
   min-height: 100vh;
 }
 
@@ -191,9 +192,9 @@ p {
 }
 
 .rail-brand h1 {
-  font-size: 17px;
+  font-size: 18px;
   line-height: 24px;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .rail-brand p,
@@ -206,8 +207,8 @@ p {
 
 .brand-mark {
   display: grid;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   flex: 0 0 auto;
   place-items: center;
   border-radius: var(--fc-radius-md);
@@ -235,39 +236,39 @@ p {
   min-height: 0;
   min-width: 0;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
   overflow: auto;
-  padding: 20px 18px;
+  padding: 18px 16px;
   border-right: 1px solid var(--fc-border);
   background: var(--fc-bg-subtle);
 }
 
 .rail-brand {
-  padding: 2px 2px 10px;
+  padding: 2px 2px 8px;
 }
 
 .workspace {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 14px;
-  padding: 18px 20px;
+  gap: 12px;
+  padding: 18px 22px;
   overflow: auto;
 }
 
 .side-nav {
   display: grid;
-  gap: 10px;
+  gap: 6px;
 }
 
 .side-nav button {
-  gap: 18px;
+  gap: 14px;
   justify-content: flex-start;
-  min-height: 56px;
-  padding: 0 18px;
+  min-height: 48px;
+  padding: 0 16px;
   color: var(--fc-text-muted);
-  font-size: 20px;
-  font-weight: 650;
+  font-size: 18px;
+  font-weight: 500;
   line-height: 1;
   border-color: transparent;
   border-radius: 10px;
@@ -298,7 +299,7 @@ p {
 
 .status-strip {
   display: grid;
-  gap: 7px;
+  gap: 6px;
   padding: 4px 2px 0;
 }
 
@@ -347,9 +348,9 @@ p {
   margin-left: auto;
   overflow: hidden;
   color: var(--fc-text);
-  font-size: 20px;
-  line-height: 26px;
-  font-weight: 650;
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 550;
   text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -410,7 +411,7 @@ p {
   display: grid;
   max-width: 760px;
   gap: var(--fc-space-4);
-  padding: var(--fc-space-4);
+  padding: 14px;
   border: 1px solid var(--fc-border);
   border-radius: var(--fc-radius-md);
   background: var(--fc-surface);
@@ -502,19 +503,19 @@ p {
 
 .view {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .view-header {
   justify-content: space-between;
-  min-height: 44px;
+  min-height: 40px;
 }
 
 .view-header h2,
 .modal-header h3 {
-  font-size: 22px;
-  line-height: 30px;
-  font-weight: 650;
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
 }
 
 .toolbar-actions,
@@ -528,7 +529,7 @@ p {
 .row-actions button,
 .modal-header button,
 .notice button {
-  width: 34px;
+  width: 32px;
   padding: 0;
 }
 
@@ -536,8 +537,8 @@ p {
   display: flex;
   align-items: center;
   gap: var(--fc-space-3);
-  min-height: 42px;
-  padding: 9px 12px;
+  min-height: 40px;
+  padding: 8px 11px;
   color: var(--fc-info);
   background: var(--fc-info-soft);
 }
@@ -555,8 +556,8 @@ p {
 .switch {
   position: relative;
   display: inline-flex;
-  width: 46px;
-  height: 26px;
+  width: 42px;
+  height: 24px;
   flex: 0 0 auto;
   align-items: center;
 }
@@ -570,8 +571,8 @@ p {
 
 .switch span {
   position: relative;
-  width: 46px;
-  height: 26px;
+  width: 42px;
+  height: 24px;
   border-radius: 999px;
   background: var(--fc-border-strong);
   transition: background 120ms ease;
@@ -581,8 +582,8 @@ p {
   position: absolute;
   top: 3px;
   left: 3px;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background: var(--fc-surface);
   box-shadow: var(--fc-shadow-sm);
@@ -595,7 +596,7 @@ p {
 }
 
 .switch input:checked + span::after {
-  transform: translateX(20px);
+  transform: translateX(18px);
 }
 
 .switch input:disabled + span {
@@ -624,18 +625,18 @@ p {
 
 .subscription-list {
   display: grid;
-  gap: var(--fc-space-2);
+  gap: 10px;
 }
 
 .subscription-import {
   display: grid;
-  grid-template-columns: minmax(280px, 420px) 38px 38px;
+  grid-template-columns: minmax(280px, 420px) 34px 34px;
   gap: var(--fc-space-2);
   align-items: center;
 }
 
 .subscription-import button {
-  width: 38px;
+  width: 34px;
   padding: 0;
 }
 
@@ -643,7 +644,7 @@ p {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--fc-space-3);
-  padding: var(--fc-space-3);
+  padding: 12px 14px;
 }
 
 .subscription-main {
@@ -665,6 +666,7 @@ p {
   min-width: 140px;
   gap: 2px;
   color: var(--fc-text);
+  font-weight: 600;
 }
 
 .subscription-title span {
@@ -767,13 +769,13 @@ p {
 
 .channel-list {
   display: grid;
-  gap: var(--fc-space-3);
+  gap: 10px;
 }
 
 .channel-card {
   display: grid;
-  gap: var(--fc-space-3);
-  padding: var(--fc-space-3);
+  gap: 10px;
+  padding: 12px 14px;
   border: 1px solid var(--fc-border);
   border-radius: var(--fc-radius-md);
   background: var(--fc-surface);
@@ -782,18 +784,19 @@ p {
 
 .channel-card:hover {
   border-color: var(--fc-border-strong);
-  background: var(--fc-surface-muted);
+  background: var(--fc-surface);
+  box-shadow: var(--fc-shadow-sm);
 }
 
 .channel-card.selected {
-  border-left: 3px solid var(--fc-brand);
+  border-color: var(--fc-brand-border);
   background: var(--fc-brand-soft);
 }
 
 .channel-card-main,
 .channel-card-sub {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, auto) 54px;
+  grid-template-columns: minmax(0, 1fr) minmax(250px, auto) 48px;
   gap: var(--fc-space-3);
   align-items: center;
 }
@@ -806,6 +809,12 @@ p {
   display: grid;
   min-width: 0;
   gap: var(--fc-space-1);
+}
+
+.channel-title strong {
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 600;
 }
 
 .channel-title strong,
@@ -828,7 +837,7 @@ p {
   min-width: 0;
   align-items: center;
   justify-content: flex-end;
-  gap: 28px;
+  gap: 22px;
 }
 
 .channel-speed {
@@ -852,7 +861,7 @@ p {
   min-width: 0;
   flex: 1 1 0;
   justify-content: flex-start;
-  height: 30px;
+  height: 28px;
   padding: 0 var(--fc-space-2);
   background: var(--fc-surface);
 }
@@ -876,7 +885,7 @@ p {
 .context-menu {
   position: fixed;
   display: grid;
-  width: 200px;
+  width: 190px;
   gap: 2px;
   padding: 6px;
   border: 1px solid var(--fc-border);
@@ -1056,7 +1065,7 @@ p {
   max-height: calc(100vh - 48px);
   gap: var(--fc-space-4);
   overflow: auto;
-  padding: 18px;
+  padding: 16px;
   box-shadow: var(--fc-shadow-md);
 }
 
@@ -1066,7 +1075,7 @@ p {
   max-height: 100vh;
   gap: var(--fc-space-4);
   overflow: auto;
-  padding: 18px;
+  padding: 16px;
   border-left: 1px solid var(--fc-border);
   background: var(--fc-surface);
   box-shadow: var(--fc-shadow-md);
@@ -1352,7 +1361,7 @@ p {
 
 @media (max-width: 1280px) {
   .app-shell {
-    grid-template-columns: 232px minmax(0, 1fr);
+    grid-template-columns: 220px minmax(0, 1fr);
   }
 
 }
