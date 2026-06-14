@@ -299,6 +299,7 @@ p {
 .status-pane {
   display: grid;
   gap: 10px;
+  margin-top: auto;
 }
 
 .status-grid {
