@@ -13,7 +13,6 @@ const emit = defineEmits<{
 
 <template>
   <nav class="side-nav" aria-label="主导航">
-    <span class="nav-section">工作台</span>
     <button
       type="button"
       :class="{ active: activeView === 'channels' }"
@@ -30,7 +29,6 @@ const emit = defineEmits<{
       <Rss :size="18" />
       订阅
     </button>
-    <span class="nav-section">工具</span>
     <button
       type="button"
       class="planned"

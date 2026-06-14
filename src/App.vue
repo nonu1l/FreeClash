@@ -47,6 +47,11 @@ const subscriptions = computed(() => snapshot.value?.config.subscriptions ?? [])
 const channels = computed(() => snapshot.value?.config.channels ?? []);
 const nodes = computed(() => snapshot.value?.nodes ?? []);
 const stats = computed(() => snapshot.value?.stats ?? []);
+const visibleStatusMessage = computed(() => {
+  const message = snapshot.value?.status.message?.trim();
+  if (!message || message === "mihomo 核心已就绪") return null;
+  return message;
+});
 
 function setError(value: unknown) {
   error.value = value instanceof Error ? value.message : String(value);
@@ -233,9 +238,9 @@ onBeforeUnmount(() => {
         </button>
       </div>
 
-      <div v-if="snapshot?.status.message" class="notice">
+      <div v-if="visibleStatusMessage" class="notice">
         <Activity :size="18" />
-        <span>{{ snapshot.status.message }}</span>
+        <span>{{ visibleStatusMessage }}</span>
       </div>
 
       <div v-if="loading" class="empty loading-state">

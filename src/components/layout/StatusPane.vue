@@ -35,9 +35,7 @@ function onToggle(event: Event) {
 </script>
 
 <template>
-  <section class="status-pane" aria-label="运行状态">
-    <span class="nav-section">状态</span>
-
+  <section class="status-pane" aria-label="运行概览">
     <div class="status-grid">
       <div class="metric-card core-metric">
         <div class="core-metric-main">

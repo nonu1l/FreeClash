@@ -223,8 +223,7 @@ p {
 .node-picker span,
 .rules-head span,
 .details-list dt,
-.targets-title span,
-.nav-section {
+.targets-title span {
   display: block;
   color: var(--fc-text-muted);
   font-size: 12px;
@@ -295,11 +294,6 @@ p {
   color: var(--fc-text-subtle);
   font-size: 11px;
   font-weight: 650;
-}
-
-.nav-section {
-  margin-top: var(--fc-space-2);
-  padding: 0 var(--fc-space-2);
 }
 
 .status-pane {
@@ -1373,10 +1367,6 @@ p {
 
   .side-nav {
     grid-template-columns: 1fr;
-  }
-
-  .nav-section {
-    display: none;
   }
 
   .rules-table {

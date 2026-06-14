@@ -26,7 +26,7 @@ const emit = defineEmits<{
         </div>
         <div>
           <h1>FreeClash</h1>
-          <p>应用代理通道工作台</p>
+          <p>应用代理通道</p>
         </div>
       </div>
 
