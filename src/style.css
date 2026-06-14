@@ -220,11 +220,36 @@ p {
   display: grid;
   width: 32px;
   height: 32px;
+  min-height: 32px;
   flex: 0 0 auto;
   place-items: center;
+  padding: 0;
+  border-color: transparent;
   border-radius: var(--fc-radius-md);
+  color: var(--fc-rail-text);
+  background: transparent;
+  box-shadow: none;
+  transition:
+    color 120ms ease,
+    background 120ms ease;
+}
+
+.brand-toggle.active {
   color: var(--fc-text-inverse);
   background: var(--fc-brand);
+}
+
+.brand-toggle:hover:not(:disabled),
+.brand-toggle:focus-visible {
+  color: var(--fc-rail-active);
+  border-color: transparent;
+  background: var(--fc-rail-hover-bg);
+}
+
+.brand-toggle.active:hover:not(:disabled),
+.brand-toggle.active:focus-visible {
+  color: var(--fc-text-inverse);
+  background: var(--fc-brand-hover);
 }
 
 .status-heading span,
@@ -334,38 +359,6 @@ p {
   display: grid;
   gap: 6px;
   padding: 4px 2px 0;
-}
-
-.status-tools {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 2px;
-}
-
-.status-icon-button {
-  width: 30px;
-  min-height: 30px;
-  padding: 0;
-  color: var(--fc-text-muted);
-  border-color: transparent;
-  background: transparent;
-  box-shadow: none;
-}
-
-.status-icon-button:hover:not(:disabled),
-.status-icon-button:focus-visible {
-  color: var(--fc-text);
-  border-color: transparent;
-  background: var(--fc-surface-hover);
-}
-
-.status-icon-button.link-toggle.active {
-  color: var(--fc-success);
-}
-
-.status-icon-button.link-toggle.active.running {
-  background: color-mix(in srgb, var(--fc-success) 12%, transparent);
 }
 
 .status-metric {
@@ -882,6 +875,37 @@ p {
 .channel-speed strong {
   font-size: 13px;
   line-height: 18px;
+}
+
+.channel-toggle {
+  width: 32px;
+  min-height: 32px;
+  justify-self: end;
+  padding: 0;
+  color: var(--fc-rail-text);
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  transition:
+    color 120ms ease,
+    background 120ms ease;
+}
+
+.channel-toggle.active {
+  color: var(--fc-rail-active);
+  background: var(--fc-rail-active-bg);
+}
+
+.channel-toggle:hover:not(:disabled),
+.channel-toggle:focus-visible {
+  color: var(--fc-rail-active);
+  border-color: transparent;
+  background: var(--fc-rail-hover-bg);
+}
+
+.channel-toggle.active:hover:not(:disabled),
+.channel-toggle.active:focus-visible {
+  background: var(--fc-rail-active-bg);
 }
 
 .channel-addresses {

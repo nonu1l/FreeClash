@@ -204,10 +204,6 @@ async fn dispatch(manager: &AppManager, command: &str, payload: Value) -> Result
                 .test_channel_proxy(&field::<String>(&payload, "channelId")?)
                 .await?,
         ),
-        "restart_core" => {
-            manager.restart_core().await?;
-            Ok(Value::Null)
-        }
         "test_node_delay" => to_value(manager.test_node_delay(field(&payload, "node")?).await?),
         "set_http_api_config" => {
             manager

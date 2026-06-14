@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { Copy, Edit3, Route, Stethoscope, Trash2 } from "@lucide/vue";
+import { Copy, Edit3, Route, Stethoscope, Trash2, Zap } from "@lucide/vue";
 import type { ChannelStats, ProxyChannel } from "../../types";
 import { formatBytes, formatSpeed } from "../../utils/format";
 
@@ -41,8 +41,8 @@ function totalTraffic() {
   return (props.stats?.upload_total ?? 0) + (props.stats?.download_total ?? 0);
 }
 
-function onToggle(event: Event) {
-  emit("toggle", props.channel, (event.target as HTMLInputElement).checked);
+function toggleChannel() {
+  emit("toggle", props.channel, !props.channel.enabled);
 }
 
 function openMenu(event: MouseEvent) {
@@ -80,15 +80,17 @@ function runMenu(action: () => void) {
         <strong class="channel-traffic">{{ formatBytes(totalTraffic()) }}</strong>
       </div>
 
-      <label class="switch" title="切换代理链路" @click.stop>
-        <input
-          type="checkbox"
-          :checked="channel.enabled"
-          :disabled="busy === `channel-enabled-${channel.id}`"
-          @change="onToggle"
-        />
-        <span></span>
-      </label>
+      <button
+        type="button"
+        class="channel-toggle"
+        :class="{ active: channel.enabled }"
+        :title="channel.enabled ? '关闭此代理链路' : '开启此代理链路'"
+        :aria-pressed="channel.enabled"
+        :disabled="busy === `channel-enabled-${channel.id}`"
+        @click.stop="toggleChannel"
+      >
+        <Zap :size="17" />
+      </button>
     </div>
 
     <div class="channel-card-sub">

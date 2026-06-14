@@ -38,7 +38,6 @@ const COMMANDS = {
   getChannelStats: "get_channel_stats",
   diagnoseChannel: "diagnose_channel",
   testChannelProxy: "test_channel_proxy",
-  restartCore: "restart_core",
   testNodeDelay: "test_node_delay",
 } as const;
 
@@ -60,7 +59,6 @@ export interface FreeClashApi {
   getChannelStats(): Promise<ChannelStats[]>;
   diagnoseChannel(channelId: string): Promise<ChannelDiagnostics>;
   testChannelProxy(channelId: string): Promise<ChannelProxyTestResult>;
-  restartCore(): Promise<void>;
   testNodeDelay(node: string): Promise<DelayResult>;
 }
 
@@ -87,7 +85,6 @@ export function createFreeClashApi(transport: ApiTransport = defaultTransport())
     getChannelStats: () => call(COMMANDS.getChannelStats),
     diagnoseChannel: (channelId) => call(COMMANDS.diagnoseChannel, { channelId }),
     testChannelProxy: (channelId) => call(COMMANDS.testChannelProxy, { channelId }),
-    restartCore: () => call(COMMANDS.restartCore),
     testNodeDelay: (node) => call(COMMANDS.testNodeDelay, { node }),
   };
 }

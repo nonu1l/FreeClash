@@ -190,11 +190,6 @@ async fn test_channel_proxy(
 }
 
 #[tauri::command]
-async fn restart_core(manager: State<'_, AppManager>) -> Result<(), String> {
-    manager.restart_core().await.map_err(display_error)
-}
-
-#[tauri::command]
 async fn test_node_delay(
     manager: State<'_, AppManager>,
     node: String,
@@ -237,7 +232,6 @@ pub fn run() {
             get_channel_stats,
             diagnose_channel,
             test_channel_proxy,
-            restart_core,
             test_node_delay
         ])
         .build(tauri::generate_context!())

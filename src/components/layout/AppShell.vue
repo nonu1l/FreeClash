@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import { Zap } from "@lucide/vue";
 import type { ActiveView, AppSnapshot } from "../../types";
 import SideNav from "./SideNav.vue";
 import StatusPane from "./StatusPane.vue";
 
-defineProps<{
+const props = defineProps<{
   snapshot: AppSnapshot | null;
   activeView: ActiveView;
   busy: string | null;
@@ -13,17 +14,31 @@ defineProps<{
 const emit = defineEmits<{
   changeView: [view: ActiveView];
   toggleGlobal: [enabled: boolean];
-  restartCore: [];
 }>();
+
+const globalProxyEnabled = computed(() => props.snapshot?.config.global_proxy_enabled ?? true);
+
+function toggleGlobal() {
+  if (props.busy === "global-proxy") return;
+  emit("toggleGlobal", !globalProxyEnabled.value);
+}
 </script>
 
 <template>
   <main class="app-shell">
     <aside class="left-rail">
       <div class="rail-brand">
-        <div class="brand-mark">
+        <button
+          type="button"
+          class="brand-mark brand-toggle"
+          :class="{ active: globalProxyEnabled }"
+          :title="globalProxyEnabled ? '关闭代理链路' : '开启代理链路'"
+          :aria-pressed="globalProxyEnabled"
+          :disabled="busy === 'global-proxy'"
+          @click="toggleGlobal"
+        >
           <Zap :size="20" />
-        </div>
+        </button>
         <div>
           <h1>FreeClash</h1>
           <p>应用代理</p>
@@ -34,9 +49,6 @@ const emit = defineEmits<{
 
       <StatusPane
         :snapshot="snapshot"
-        :busy="busy"
-        @toggle-global="emit('toggleGlobal', $event)"
-        @restart-core="emit('restartCore')"
       />
     </aside>
 

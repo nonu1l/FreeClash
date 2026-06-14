@@ -125,10 +125,6 @@ function setHttpApiConfig(enabled: boolean, port: number) {
   void runAction("http-api", () => freeClashApi.setHttpApiConfig(enabled, port));
 }
 
-function restartCore() {
-  void runAction("restart", () => freeClashApi.restartCore());
-}
-
 async function createSubscription(input: SubscriptionInput) {
   return await runAction("save-subscription", () => freeClashApi.createSubscription(input));
 }
@@ -224,7 +220,6 @@ onBeforeUnmount(() => {
     :busy="busy"
     @change-view="activeView = $event"
     @toggle-global="setGlobalProxyEnabled"
-    @restart-core="restartCore"
   >
       <div v-if="error" class="notice error">
         <X :size="18" />

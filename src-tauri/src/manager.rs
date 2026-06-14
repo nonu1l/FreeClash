@@ -527,10 +527,6 @@ impl AppManager {
         Ok(result)
     }
 
-    pub async fn restart_core(&self) -> Result<()> {
-        self.apply_runtime().await
-    }
-
     pub async fn test_node_delay(&self, node: String) -> Result<DelayResult> {
         if node.eq_ignore_ascii_case("DIRECT") {
             return Ok(DelayResult { node, delay: 0 });
