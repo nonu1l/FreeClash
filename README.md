@@ -46,3 +46,11 @@ npm install
 npm run build
 npm run tauri:dev
 ```
+
+
+## 致谢
+
+本项目得以实现，离不开以下开源项目：
+
+- [Clash Verge Rev](https://github.com/clash-verge-rev/clash-verge-rev)
+- [MetaCubeX/mihomo](https://github.com/MetaCubeX/mihomo)
