@@ -1,6 +1,6 @@
 [package]
 name = "freeclash"
-version = "0.1.0"
+version = "0.1.1"
 description = "Application-level mihomo proxy launcher"
 authors = ["FreeClash"]
 edition = "2021"
