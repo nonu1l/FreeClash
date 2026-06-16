@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { ArrowDown, ArrowUp, ListChecks, Settings } from "@lucide/vue";
+import { ArrowDown, ArrowUp, Database, ListChecks } from "@lucide/vue";
 import type { AppSnapshot } from "../../types";
 import { formatBytes, formatSpeed } from "../../utils/format";
 
@@ -36,7 +36,7 @@ const totalTraffic = computed(() =>
         <strong>{{ formatSpeed(totalDownloadSpeed) }}</strong>
       </div>
       <div class="status-metric">
-        <Settings :size="15" class="traffic" />
+        <Database :size="15" class="traffic" />
         <strong>{{ formatBytes(totalTraffic) }}</strong>
       </div>
       <div class="status-metric">

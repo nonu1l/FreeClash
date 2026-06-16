@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { ArrowDown, ArrowUp, Copy, Edit3, Route, Settings, Stethoscope, Trash2, Zap } from "@lucide/vue";
+import { ArrowDown, ArrowUp, Copy, CopyPlus, Database, Edit3, Stethoscope, Trash2, Zap } from "@lucide/vue";
 import type { ChannelStats, ProxyChannel } from "../../types";
 import { formatBytes, formatSpeed } from "../../utils/format";
 
@@ -82,7 +82,7 @@ function runMenu(action: () => void) {
           <strong>{{ formatSpeed(stats?.download_speed ?? 0) }}</strong>
         </span>
         <span class="channel-metric-tag traffic" title="总流量">
-          <Settings :size="14" class="traffic" />
+          <Database :size="14" class="traffic" />
           <strong>{{ formatBytes(totalTraffic()) }}</strong>
         </span>
       </div>
@@ -125,7 +125,7 @@ function runMenu(action: () => void) {
           :disabled="busy === `duplicate-${channel.id}`"
           @click.stop="emit('duplicate', channel)"
         >
-          <Route :size="16" />
+          <CopyPlus :size="16" />
         </button>
         <button
           type="button"
@@ -159,7 +159,7 @@ function runMenu(action: () => void) {
           编辑
         </button>
         <button type="button" @click="runMenu(() => emit('duplicate', channel))">
-          <Route :size="15" />
+          <CopyPlus :size="15" />
           复制代理
         </button>
         <button type="button" class="danger-item" @click="runMenu(() => emit('delete', channel))">
