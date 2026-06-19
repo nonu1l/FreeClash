@@ -4,7 +4,7 @@ use std::time::Instant;
 use chrono::Utc;
 use uuid::Uuid;
 
-use crate::models::{ChannelConnection, ChannelStats};
+use crate::models::{PinConnection, PinStats};
 
 #[derive(Debug)]
 struct ConnectionMetric {
@@ -17,8 +17,8 @@ struct ConnectionMetric {
 }
 
 #[derive(Debug)]
-pub struct ChannelMetrics {
-    channel_id: String,
+pub struct PinMetrics {
+    node_name: String,
     upload_total: u64,
     download_total: u64,
     last_upload_total: u64,
@@ -36,10 +36,10 @@ pub enum TrafficDirection {
     Download,
 }
 
-impl ChannelMetrics {
-    pub fn new(channel_id: impl Into<String>) -> Self {
+impl PinMetrics {
+    pub fn new(node_name: impl Into<String>) -> Self {
         Self {
-            channel_id: channel_id.into(),
+            node_name: node_name.into(),
             upload_total: 0,
             download_total: 0,
             last_upload_total: 0,
@@ -97,7 +97,7 @@ impl ChannelMetrics {
         self.trim_old_connections();
     }
 
-    pub fn snapshot(&mut self) -> ChannelStats {
+    pub fn snapshot(&mut self) -> PinStats {
         let elapsed = self.last_sample.elapsed().as_secs_f64();
         if elapsed >= 0.5 {
             self.upload_speed = (self.upload_total - self.last_upload_total) as f64 / elapsed;
@@ -112,7 +112,7 @@ impl ChannelMetrics {
             .order
             .iter()
             .filter_map(|id| {
-                self.connections.get(id).map(|conn| ChannelConnection {
+                self.connections.get(id).map(|conn| PinConnection {
                     id: id.clone(),
                     target: conn.target.clone(),
                     method: conn.method.clone(),
@@ -125,8 +125,8 @@ impl ChannelMetrics {
             .take(30)
             .collect();
 
-        ChannelStats {
-            channel_id: self.channel_id.clone(),
+        PinStats {
+            node_name: self.node_name.clone(),
             upload_total: self.upload_total,
             download_total: self.download_total,
             upload_speed: self.upload_speed,

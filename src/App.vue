@@ -1,345 +1,317 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { Activity, Copy, X } from "@lucide/vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import {
+  ArrowDown,
+  ArrowUp,
+  Database,
+  Gauge,
+  Pin,
+  PinOff,
+  RefreshCw,
+  Search,
+  Settings,
+  X,
+} from "@lucide/vue";
 import { freeClashApi } from "./api";
-import AppShell from "./components/layout/AppShell.vue";
-import ConfirmDialog from "./components/common/ConfirmDialog.vue";
-import ToastHost from "./components/common/ToastHost.vue";
-import RulesView from "./views/RulesView.vue";
-import SubscriptionsView from "./views/SubscriptionsView.vue";
-import { copyTextToClipboard } from "./utils/clipboard";
-import type {
-  ActiveView,
-  AppSnapshot,
-  ChannelDiagnostics,
-  ChannelInput,
-  ChannelProxyTestResult,
-  SubscriptionInput,
-} from "./types";
+import type { AppSnapshot, DelayResult, NodeInfo, PinRuntime, SubscriptionInput } from "./types";
 
 const snapshot = ref<AppSnapshot | null>(null);
-const activeView = ref<ActiveView>("channels");
-const loading = ref(true);
-const busy = ref<string | null>(null);
-const error = ref<string | null>(null);
-const settingsHttpPort = ref(19290);
-const toasts = ref<Array<{ id: number; message: string; tone: "success" | "error" | "info" }>>([]);
-const confirmState = ref<{
-  open: boolean;
-  title: string;
-  message: string;
-  confirmText: string;
-  danger: boolean;
-  resolve: ((value: boolean) => void) | null;
-}>({
-  open: false,
-  title: "",
-  message: "",
-  confirmText: "确认",
-  danger: false,
-  resolve: null,
+const error = ref("");
+const busy = ref("");
+const showPinnedOnly = ref(false);
+const showSubscriptionDialog = ref(false);
+const showPortDialog = ref(false);
+const editingNodeName = ref("");
+const portDraft = ref(0);
+const delayOverrides = ref<Record<string, number>>({});
+const subscriptionDraft = reactive<SubscriptionInput>({
+  name: "",
+  url: "",
 });
 
-let timer: number | undefined;
-let toastId = 0;
+let pollTimer: number | undefined;
 
-const subscriptions = computed(() => snapshot.value?.config.subscriptions ?? []);
-const channels = computed(() => snapshot.value?.config.channels ?? []);
-const nodes = computed(() => snapshot.value?.nodes ?? []);
-const stats = computed(() => snapshot.value?.stats ?? []);
-const visibleStatusMessage = computed(() => {
-  const message = snapshot.value?.status.message?.trim();
-  if (!message || message === "mihomo 核心已就绪") return null;
-  if (message.startsWith("全局代理链路已")) return null;
-  return message;
+const pinsByNode = computed(() => {
+  const map = new Map<string, PinRuntime>();
+  for (const pin of snapshot.value?.pins ?? []) {
+    map.set(pin.node_name, pin);
+  }
+  return map;
 });
 
-function setError(value: unknown) {
-  error.value = value instanceof Error ? value.message : String(value);
-}
+const nodes = computed(() => {
+  const source = snapshot.value?.nodes ?? [];
+  if (!showPinnedOnly.value) return source;
+  return source.filter((node) => pinsByNode.value.has(node.name));
+});
 
-function notify(message: string, tone: "success" | "error" | "info" = "success") {
-  const id = ++toastId;
-  toasts.value = [...toasts.value, { id, message, tone }];
-  window.setTimeout(() => dismissToast(id), 2400);
-}
+const totals = computed(() => {
+  let uploadSpeed = 0;
+  let downloadSpeed = 0;
+  let traffic = 0;
+  for (const pin of snapshot.value?.pins ?? []) {
+    uploadSpeed += pin.stats.upload_speed;
+    downloadSpeed += pin.stats.download_speed;
+    traffic += pin.stats.upload_total + pin.stats.download_total;
+  }
+  return { uploadSpeed, downloadSpeed, traffic };
+});
 
-function dismissToast(id: number) {
-  toasts.value = toasts.value.filter((toast) => toast.id !== id);
-}
+const subscriptionLabel = computed(() => snapshot.value?.config.subscription?.name || "订阅设置");
 
-function confirmAction(
-  title: string,
-  message: string,
-  options: { confirmText?: string; danger?: boolean } = {},
-) {
-  return new Promise<boolean>((resolve) => {
-    confirmState.value = {
-      open: true,
-      title,
-      message,
-      confirmText: options.confirmText ?? "确认",
-      danger: options.danger ?? false,
-      resolve,
-    };
-  });
-}
-
-function closeConfirm(result: boolean) {
-  const resolve = confirmState.value.resolve;
-  confirmState.value.open = false;
-  confirmState.value.resolve = null;
-  resolve?.(result);
-}
-
-async function loadState(quiet = false) {
+async function refreshState() {
   try {
-    if (!quiet) loading.value = true;
     snapshot.value = await freeClashApi.getState();
-    error.value = null;
   } catch (err) {
-    setError(err);
-  } finally {
-    loading.value = false;
+    error.value = stringifyError(err);
   }
 }
 
-async function runAction<T>(name: string, action: () => Promise<T>, reload = true): Promise<T> {
+async function runAction(name: string, action: () => Promise<unknown>, refresh = true) {
   busy.value = name;
+  error.value = "";
   try {
-    const result = await action();
-    if (reload) await loadState(true);
-    return result;
+    await action();
+    if (refresh) await refreshState();
   } catch (err) {
-    setError(err);
-    throw err;
+    error.value = stringifyError(err);
   } finally {
-    busy.value = null;
+    busy.value = "";
   }
 }
 
-function setGlobalProxyEnabled(enabled: boolean) {
-  void runAction("global-proxy", () => freeClashApi.setGlobalProxyEnabled(enabled));
+function openSubscriptionDialog() {
+  const subscription = snapshot.value?.config.subscription;
+  subscriptionDraft.name = subscription?.name ?? "";
+  subscriptionDraft.url = subscription?.url ?? "";
+  showSubscriptionDialog.value = true;
 }
 
-function setHttpApiConfig(enabled: boolean, port: number) {
-  void runAction("http-api", () => freeClashApi.setHttpApiConfig(enabled, port));
+async function saveSubscription() {
+  await runAction("subscription", () => freeClashApi.setSubscription({ ...subscriptionDraft }));
+  showSubscriptionDialog.value = false;
 }
 
-async function createSubscription(input: SubscriptionInput) {
-  return await runAction("save-subscription", () => freeClashApi.createSubscription(input));
+async function refreshSubscription() {
+  await runAction("refresh-subscription", () => freeClashApi.refreshSubscription());
 }
 
-async function deleteSubscription(id: string) {
-  await runAction(`delete-subscription-${id}`, () => freeClashApi.deleteSubscription(id));
+async function togglePin(node: NodeInfo) {
+  const pinned = pinsByNode.value.has(node.name);
+  await runAction(
+    `pin-${node.name}`,
+    () => (pinned ? freeClashApi.unpinNode(node.name) : freeClashApi.pinNode(node.name)),
+  );
 }
 
-async function refreshSubscription(id: string) {
-  await runAction(`refresh-subscription-${id}`, () => freeClashApi.refreshSubscription(id));
+function openPortDialog(nodeName: string) {
+  const pin = pinsByNode.value.get(nodeName);
+  if (!pin) return;
+  editingNodeName.value = nodeName;
+  portDraft.value = pin.port;
+  showPortDialog.value = true;
 }
 
-async function refreshNodes() {
-  await runAction("refresh-nodes", () => freeClashApi.refreshNodes());
+async function savePort() {
+  await runAction("port", () => freeClashApi.updatePinPort(editingNodeName.value, portDraft.value));
+  showPortDialog.value = false;
 }
 
-async function createChannel(input: ChannelInput) {
-  await runAction("save-channel", () => freeClashApi.createChannel(input));
-}
-
-async function updateChannel(id: string, input: ChannelInput) {
-  await runAction("save-channel", () => freeClashApi.updateChannel(id, input));
-}
-
-async function deleteChannel(id: string) {
-  await runAction(`delete-${id}`, () => freeClashApi.deleteChannel(id));
-}
-
-async function duplicateChannel(id: string) {
-  await runAction(`duplicate-${id}`, () => freeClashApi.duplicateChannel(id));
-}
-
-async function setChannelEnabled(id: string, enabled: boolean) {
-  await runAction(`channel-enabled-${id}`, () => freeClashApi.setChannelEnabled(id, enabled));
-}
-
-async function diagnoseChannel(id: string) {
-  return await runAction<ChannelDiagnostics>(
-    `diagnose-${id}`,
-    () => freeClashApi.diagnoseChannel(id),
+async function testDelay(nodeName: string) {
+  await runAction(
+    `delay-${nodeName}`,
+    async () => {
+      const result = await freeClashApi.testNodeDelay(nodeName);
+      delayOverrides.value = { ...delayOverrides.value, [result.node]: result.delay };
+    },
     false,
   );
+  await refreshState();
 }
 
-async function testChannelProxy(id: string) {
-  return await runAction<ChannelProxyTestResult>(
-    `test-channel-${id}`,
-    () => freeClashApi.testChannelProxy(id),
-    true,
+async function testAllDelays() {
+  await runAction(
+    "delay-all",
+    async () => {
+      const results = await freeClashApi.testAllNodeDelays();
+      const next = { ...delayOverrides.value };
+      for (const result of results) next[result.node] = result.delay;
+      delayOverrides.value = next;
+    },
+    false,
   );
+  await refreshState();
 }
 
-function toggleHttpApi(event: Event) {
-  const enabled = (event.target as HTMLInputElement).checked;
-  setHttpApiConfig(enabled, settingsHttpPort.value);
+function delayFor(node: NodeInfo) {
+  return delayOverrides.value[node.name] ?? node.delay ?? null;
 }
 
-function applyHttpApiSettings() {
-  setHttpApiConfig(snapshot.value?.config.http_api_enabled ?? false, settingsHttpPort.value);
+function stringifyError(err: unknown) {
+  if (err instanceof Error) return err.message;
+  return String(err);
 }
 
-async function copyHttpToken() {
-  const token = snapshot.value?.config.http_api_token;
-  if (!token) return;
-  const copied = await copyTextToClipboard(token);
-  localStorage.setItem("freeclashApiToken", token);
-  localStorage.setItem("freeclashApiBaseUrl", `http://127.0.0.1:${settingsHttpPort.value}`);
-  notify(copied ? "已复制 HTTP API token，并写入浏览器调试配置" : "已写入浏览器调试配置，复制 token 失败", copied ? "success" : "error");
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
 }
 
-watch(
-  () => snapshot.value?.config.http_api_port,
-  (port) => {
-    settingsHttpPort.value = port ?? 19290;
-  },
-  { immediate: true },
-);
+function formatSpeed(bytes: number) {
+  return `${formatBytes(bytes)}/s`;
+}
 
-onMounted(async () => {
-  await loadState();
-  timer = window.setInterval(() => loadState(true), 1200);
+onMounted(() => {
+  void refreshState();
+  pollTimer = window.setInterval(refreshState, 1200);
 });
 
 onBeforeUnmount(() => {
-  if (timer) window.clearInterval(timer);
+  if (pollTimer) window.clearInterval(pollTimer);
 });
 </script>
 
 <template>
-  <AppShell
-    :snapshot="snapshot"
-    :active-view="activeView"
-    :busy="busy"
-    @change-view="activeView = $event"
-    @toggle-global="setGlobalProxyEnabled"
-  >
-      <div v-if="error" class="notice error">
-        <X :size="18" />
-        <span>{{ error }}</span>
-        <button type="button" title="关闭" @click="error = null">
-          <X :size="16" />
+  <main class="single-page">
+    <section class="node-grid" aria-label="节点列表">
+      <article
+        v-for="node in nodes"
+        :key="node.name"
+        class="node-card"
+        :class="{
+          pinned: pinsByNode.has(node.name),
+          warning: pinsByNode.get(node.name)?.port_available === false,
+        }"
+      >
+        <div class="node-card-top">
+          <h2 :title="node.name">{{ node.name }}</h2>
+          <div class="node-metrics">
+            <span title="上行速度"><ArrowUp :size="15" />{{ formatSpeed(pinsByNode.get(node.name)?.stats.upload_speed ?? 0) }}</span>
+            <span title="下行速度"><ArrowDown :size="15" />{{ formatSpeed(pinsByNode.get(node.name)?.stats.download_speed ?? 0) }}</span>
+            <span title="总流量"><Database :size="15" />{{ formatBytes((pinsByNode.get(node.name)?.stats.upload_total ?? 0) + (pinsByNode.get(node.name)?.stats.download_total ?? 0)) }}</span>
+            <button
+              type="button"
+              class="icon-pin"
+              :class="{ active: pinsByNode.has(node.name) }"
+              :title="pinsByNode.has(node.name) ? '取消 Pin 并关闭端口' : 'Pin 节点并生成端口'"
+              :disabled="busy === `pin-${node.name}`"
+              @click="togglePin(node)"
+            >
+              <PinOff v-if="pinsByNode.has(node.name)" :size="17" />
+              <Pin v-else :size="17" />
+            </button>
+          </div>
+        </div>
+
+        <div class="node-card-bottom">
+          <button
+            type="button"
+            class="port-pill"
+            :class="{ editable: pinsByNode.has(node.name) }"
+            :disabled="!pinsByNode.has(node.name)"
+            :title="pinsByNode.has(node.name) ? '修改本地代理端口' : 'Pin 后自动分配端口'"
+            @click="openPortDialog(node.name)"
+          >
+            <span>HTTP</span>
+            <span>SOCKS5</span>
+            <strong>{{ pinsByNode.get(node.name)?.port ?? "未分配" }}</strong>
+          </button>
+          <button
+            type="button"
+            class="delay-button"
+            :disabled="busy === `delay-${node.name}`"
+            title="重新测试此节点延迟"
+            @click="testDelay(node.name)"
+          >
+            <Gauge :size="15" />
+            <span>{{ delayFor(node) === null ? "延迟" : `${delayFor(node)} ms` }}</span>
+          </button>
+        </div>
+
+        <p v-if="pinsByNode.get(node.name)?.port_error" class="port-error">
+          {{ pinsByNode.get(node.name)?.port_error }}
+        </p>
+      </article>
+
+      <div v-if="nodes.length === 0" class="empty-state">
+        <Search :size="28" />
+        <strong>{{ showPinnedOnly ? "暂无 Pin 节点" : "暂无节点" }}</strong>
+        <span>{{ snapshot?.config.subscription ? "刷新订阅后再看看。" : "先在底部设置订阅。" }}</span>
+      </div>
+    </section>
+
+    <p v-if="error" class="error-toast">
+      <X :size="16" />
+      {{ error }}
+      <button type="button" title="关闭" @click="error = ''"><X :size="15" /></button>
+    </p>
+
+    <footer class="bottom-toolbar">
+      <div class="toolbar-metrics">
+        <span title="总流量"><Database :size="16" />{{ formatBytes(totals.traffic) }}</span>
+        <span title="总上行速度"><ArrowUp :size="16" />{{ formatSpeed(totals.uploadSpeed) }}</span>
+        <span title="总下行速度"><ArrowDown :size="16" />{{ formatSpeed(totals.downloadSpeed) }}</span>
+      </div>
+      <div class="toolbar-actions">
+        <button type="button" :disabled="busy === 'delay-all'" @click="testAllDelays">
+          <Gauge :size="16" />
+          延迟计算
+        </button>
+        <button type="button" :disabled="busy === 'refresh-subscription'" @click="refreshSubscription">
+          <RefreshCw :size="16" />
+          刷新订阅
+        </button>
+        <button type="button" @click="openSubscriptionDialog">
+          <Settings :size="16" />
+          {{ subscriptionLabel }}
+        </button>
+        <button type="button" :class="{ active: showPinnedOnly }" @click="showPinnedOnly = !showPinnedOnly">
+          <Pin :size="16" />
+          只看 Pin
         </button>
       </div>
+    </footer>
 
-      <div v-if="visibleStatusMessage" class="notice">
-        <Activity :size="18" />
-        <span>{{ visibleStatusMessage }}</span>
-      </div>
-
-      <div v-if="loading" class="empty loading-state">
-        <Activity :size="28" />
-        <span>正在载入运行状态</span>
-      </div>
-
-      <SubscriptionsView
-        v-else-if="activeView === 'subscriptions'"
-        :subscriptions="subscriptions"
-        :nodes="nodes"
-        :busy="busy"
-        :create-subscription="createSubscription"
-        :delete-subscription="deleteSubscription"
-        :refresh-subscription="refreshSubscription"
-        :refresh-nodes="refreshNodes"
-        :confirm-action="confirmAction"
-      />
-
-      <section v-else-if="activeView === 'settings'" class="view">
-        <header class="view-header">
-          <div>
-            <h2>设置</h2>
-            <p>本机调试入口默认关闭，仅监听 127.0.0.1。</p>
-          </div>
+    <div v-if="showSubscriptionDialog" class="modal-backdrop" @click.self="showSubscriptionDialog = false">
+      <section class="modal compact-modal">
+        <header>
+          <h3>订阅设置</h3>
+          <button type="button" title="关闭" @click="showSubscriptionDialog = false"><X :size="17" /></button>
         </header>
-        <section class="settings-panel">
-          <div class="settings-row">
-            <div>
-              <strong>HTTP API 调试接口</strong>
-              <span>供浏览器、curl 和自动化测试调用 Tauri 同名命令。</span>
-            </div>
-            <label class="switch" title="切换 HTTP API">
-              <input
-                type="checkbox"
-                :checked="snapshot?.config.http_api_enabled ?? false"
-                :disabled="busy === 'http-api'"
-                @change="toggleHttpApi"
-              />
-              <span></span>
-            </label>
-          </div>
-
-          <div class="settings-row align-end">
-            <label class="field-label">
-              <span>监听端口</span>
-              <input v-model.number="settingsHttpPort" type="number" min="1" max="65535" />
-            </label>
-            <button type="button" class="button secondary" :disabled="busy === 'http-api'" @click="applyHttpApiSettings">
-              应用端口
-            </button>
-          </div>
-
-          <div class="settings-row">
-            <div>
-              <strong>访问地址</strong>
-              <span>http://127.0.0.1:{{ settingsHttpPort }}/api/health</span>
-            </div>
-            <button type="button" class="button secondary" title="复制 HTTP API token" @click="copyHttpToken">
-              <Copy :size="16" />
-              复制 token
-            </button>
-          </div>
-
-          <div class="settings-row settings-path-row">
-            <div>
-              <strong>配置文件路径</strong>
-              <code>{{ snapshot?.status.config_path ?? "-" }}</code>
-            </div>
-          </div>
-
-          <div class="settings-row settings-path-row">
-            <div>
-              <strong>Clash 核心路径</strong>
-              <code>{{ snapshot?.status.core_path ?? "-" }}</code>
-            </div>
-          </div>
-        </section>
+        <label>
+          <span>名称</span>
+          <input v-model.trim="subscriptionDraft.name" placeholder="可留空，自动使用域名" />
+        </label>
+        <label>
+          <span>URL</span>
+          <input v-model.trim="subscriptionDraft.url" placeholder="https://example.com/subscribe" />
+        </label>
+        <footer>
+          <button type="button" @click="showSubscriptionDialog = false">取消</button>
+          <button type="button" class="primary" :disabled="busy === 'subscription'" @click="saveSubscription">
+            保存
+          </button>
+        </footer>
       </section>
+    </div>
 
-      <RulesView
-        v-else
-        :channels="channels"
-        :nodes="nodes"
-        :stats="stats"
-        :busy="busy"
-        :create-channel="createChannel"
-        :update-channel="updateChannel"
-        :delete-channel="deleteChannel"
-        :duplicate-channel="duplicateChannel"
-        :set-channel-enabled="setChannelEnabled"
-        :diagnose-channel="diagnoseChannel"
-        :test-channel-proxy="testChannelProxy"
-        :notify="notify"
-        :confirm-action="confirmAction"
-      />
-
-      <ConfirmDialog
-        :open="confirmState.open"
-        :title="confirmState.title"
-        :message="confirmState.message"
-        :confirm-text="confirmState.confirmText"
-        :danger="confirmState.danger"
-        @close="closeConfirm(false)"
-        @confirm="closeConfirm(true)"
-      />
-
-      <ToastHost :toasts="toasts" @dismiss="dismissToast" />
-  </AppShell>
+    <div v-if="showPortDialog" class="modal-backdrop" @click.self="showPortDialog = false">
+      <section class="modal compact-modal">
+        <header>
+          <h3>修改端口</h3>
+          <button type="button" title="关闭" @click="showPortDialog = false"><X :size="17" /></button>
+        </header>
+        <label>
+          <span>{{ editingNodeName }}</span>
+          <input v-model.number="portDraft" type="number" min="1024" max="65535" />
+        </label>
+        <footer>
+          <button type="button" @click="showPortDialog = false">取消</button>
+          <button type="button" class="primary" :disabled="busy === 'port'" @click="savePort">保存</button>
+        </footer>
+      </section>
+    </div>
+  </main>
 </template>

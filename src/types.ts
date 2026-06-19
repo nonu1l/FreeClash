@@ -1,12 +1,9 @@
-export interface ProxyChannel {
-  id: string;
-  name: string;
-  selected_node: string | null;
-  enabled: boolean;
-  http_port: number;
-  socks_port: number;
-  mihomo_http_port: number;
-  mihomo_socks_port: number;
+export interface AppConfig {
+  subscription: Subscription | null;
+  controller_port: number;
+  controller_secret: string;
+  port_range_start: number;
+  pinned_nodes: PinnedNode[];
 }
 
 export interface Subscription {
@@ -20,17 +17,11 @@ export interface SubscriptionInput {
   url: string;
 }
 
-export interface AppConfig {
-  global_proxy_enabled: boolean;
-  subscription_url: string | null;
-  subscriptions: Subscription[];
-  controller_port: number;
-  controller_secret: string;
-  port_range_start: number;
-  http_api_enabled: boolean;
-  http_api_port: number;
-  http_api_token: string;
-  channels: ProxyChannel[];
+export interface PinnedNode {
+  node_name: string;
+  port: number;
+  mihomo_http_port: number;
+  mihomo_socks_port: number;
 }
 
 export interface NodeInfo {
@@ -42,7 +33,7 @@ export interface NodeInfo {
   provider_name: string | null;
 }
 
-export interface ChannelConnection {
+export interface PinConnection {
   id: string;
   target: string;
   method: string;
@@ -52,14 +43,22 @@ export interface ChannelConnection {
   active: boolean;
 }
 
-export interface ChannelStats {
-  channel_id: string;
+export interface PinStats {
+  node_name: string;
   upload_total: number;
   download_total: number;
   upload_speed: number;
   download_speed: number;
   active_connections: number;
-  recent_targets: ChannelConnection[];
+  recent_targets: PinConnection[];
+}
+
+export interface PinRuntime {
+  node_name: string;
+  port: number;
+  port_available: boolean;
+  port_error: string | null;
+  stats: PinStats;
 }
 
 export interface RuntimeStatus {
@@ -75,77 +74,11 @@ export interface RuntimeStatus {
 export interface AppSnapshot {
   config: AppConfig;
   nodes: NodeInfo[];
-  stats: ChannelStats[];
+  pins: PinRuntime[];
   status: RuntimeStatus;
-}
-
-export interface ChannelDraft {
-  id?: string;
-  name: string;
-  selected_node: string | null;
-  enabled: boolean;
-}
-
-export type ChannelInput = Omit<ChannelDraft, "id">;
-
-export interface SubscriptionDraft {
-  id?: string;
-  name: string;
-  url: string;
 }
 
 export interface DelayResult {
   node: string;
   delay: number;
 }
-
-export interface ChannelDiagnostics {
-  channel_id: string;
-  channel_name: string;
-  selected_node: string;
-  effective_node: string;
-  global_proxy_enabled: boolean;
-  channel_proxy_enabled: boolean;
-  core_running: boolean;
-  network_mode: string;
-  http_url: string;
-  socks_url: string;
-  http_port: number;
-  socks_port: number;
-  mihomo_http_port: number;
-  mihomo_socks_port: number;
-  stats: ChannelStats;
-  last_error: string | null;
-}
-
-export interface ChannelProxyTestResult {
-  channel_id: string;
-  network_mode: string;
-  effective_node: string;
-  success: boolean;
-  elapsed_ms: number;
-  error: string | null;
-  entries: ProxyProtocolTestResult[];
-}
-
-export interface ProxyProtocolTestResult {
-  protocol: string;
-  proxy_url: string;
-  success: boolean;
-  ip: string | null;
-  elapsed_ms: number;
-  error: string | null;
-  tests: ProxyEndpointResult[];
-}
-
-export interface ProxyEndpointResult {
-  name: string;
-  url: string;
-  success: boolean;
-  status: number | null;
-  elapsed_ms: number;
-  error: string | null;
-}
-
-export type NodeFilter = "all" | "available" | "untested" | "high";
-export type ActiveView = "subscriptions" | "channels" | "settings";

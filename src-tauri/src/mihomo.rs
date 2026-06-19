@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::hash::{Hash, Hasher};
 
 use serde::Serialize;
 
@@ -67,16 +68,16 @@ struct Listener {
     proxy: String,
 }
 
-pub fn group_name(channel_id: &str) -> String {
-    format!("fc-channel-{channel_id}")
+pub fn group_name(node_name: &str) -> String {
+    format!("fc-pin-{}", stable_key(node_name))
 }
 
-pub fn http_listener_name(channel_id: &str) -> String {
-    format!("fc-http-{channel_id}")
+pub fn http_listener_name(node_name: &str) -> String {
+    format!("fc-http-{}", stable_key(node_name))
 }
 
-pub fn socks_listener_name(channel_id: &str) -> String {
-    format!("fc-socks-{channel_id}")
+pub fn socks_listener_name(node_name: &str) -> String {
+    format!("fc-socks-{}", stable_key(node_name))
 }
 
 pub fn provider_name(subscription_id: &str) -> String {
@@ -85,9 +86,9 @@ pub fn provider_name(subscription_id: &str) -> String {
 
 pub fn render_config(config: &AppConfig) -> anyhow::Result<String> {
     let mut providers = BTreeMap::new();
-    for subscription in config
-        .subscriptions
-        .iter()
+    if let Some(subscription) = config
+        .subscription
+        .as_ref()
         .filter(|subscription| !subscription.url.trim().is_empty())
     {
         let name = provider_name(&subscription.id);
@@ -115,10 +116,10 @@ pub fn render_config(config: &AppConfig) -> anyhow::Result<String> {
     };
 
     let proxy_groups = config
-        .channels
+        .pinned_nodes
         .iter()
-        .map(|channel| ProxyGroup {
-            name: group_name(&channel.id),
+        .map(|pin| ProxyGroup {
+            name: group_name(&pin.node_name),
             kind: "select".to_string(),
             proxies: vec!["DIRECT".to_string()],
             use_providers: provider_keys.clone(),
@@ -126,20 +127,20 @@ pub fn render_config(config: &AppConfig) -> anyhow::Result<String> {
         .collect();
 
     let mut listeners = Vec::new();
-    for channel in &config.channels {
+    for pin in &config.pinned_nodes {
         listeners.push(Listener {
-            name: http_listener_name(&channel.id),
+            name: http_listener_name(&pin.node_name),
             kind: "http".to_string(),
             listen: "127.0.0.1".to_string(),
-            port: channel.mihomo_http_port,
-            proxy: group_name(&channel.id),
+            port: pin.mihomo_http_port,
+            proxy: group_name(&pin.node_name),
         });
         listeners.push(Listener {
-            name: socks_listener_name(&channel.id),
+            name: socks_listener_name(&pin.node_name),
             kind: "socks".to_string(),
             listen: "127.0.0.1".to_string(),
-            port: channel.mihomo_socks_port,
-            proxy: group_name(&channel.id),
+            port: pin.mihomo_socks_port,
+            proxy: group_name(&pin.node_name),
         });
     }
 
@@ -161,58 +162,40 @@ pub fn render_config(config: &AppConfig) -> anyhow::Result<String> {
     Ok(serde_yaml::to_string(&mihomo)?)
 }
 
+fn stable_key(value: &str) -> String {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    value.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{AppConfig, ProxyChannel};
+    use crate::models::{AppConfig, PinnedNode, Subscription};
 
     #[test]
-    fn renders_http_and_socks_listeners_and_provider() {
+    fn renders_http_and_socks_listeners_and_provider_for_pins() {
         let mut config = AppConfig::default();
-        config.subscriptions.push(crate::models::Subscription {
+        config.subscription = Some(Subscription {
             id: "sub1".into(),
             name: "Sub 1".into(),
             url: "https://example.com/sub".into(),
         });
-        config.channels.push(ProxyChannel {
-            id: "abc".into(),
-            name: "Codex".into(),
-            selected_node: Some("HK".into()),
-            enabled: true,
-            http_port: 19100,
-            socks_port: 19101,
-            mihomo_http_port: 19102,
-            mihomo_socks_port: 19103,
+        config.pinned_nodes.push(PinnedNode {
+            node_name: "HK 01".into(),
+            port: 19100,
+            mihomo_http_port: 19101,
+            mihomo_socks_port: 19102,
         });
 
         let yaml = render_config(&config).unwrap();
         assert!(yaml.contains("proxy-providers"));
         assert!(yaml.contains("fc-provider-sub1"));
-        assert!(yaml.contains("fc-channel-abc"));
-        assert!(yaml.contains("fc-http-abc"));
-        assert!(yaml.contains("fc-socks-abc"));
+        assert!(yaml.contains(&group_name("HK 01")));
+        assert!(yaml.contains(&http_listener_name("HK 01")));
+        assert!(yaml.contains(&socks_listener_name("HK 01")));
+        assert!(yaml.contains("port: 19101"));
         assert!(yaml.contains("port: 19102"));
-        assert!(yaml.contains("port: 19103"));
         assert!(yaml.contains("type: socks"));
-    }
-
-    #[test]
-    fn renders_disabled_channels_as_direct_capable_listeners() {
-        let mut config = AppConfig::default();
-        config.channels.push(ProxyChannel {
-            id: "off".into(),
-            name: "Disabled".into(),
-            selected_node: Some("HK".into()),
-            enabled: false,
-            http_port: 19100,
-            socks_port: 19101,
-            mihomo_http_port: 19102,
-            mihomo_socks_port: 19103,
-        });
-
-        let yaml = render_config(&config).unwrap();
-        assert!(yaml.contains("fc-channel-off"));
-        assert!(yaml.contains("fc-http-off"));
-        assert!(yaml.contains("fc-socks-off"));
     }
 }

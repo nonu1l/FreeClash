@@ -6,22 +6,16 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::task::JoinHandle;
 
-use crate::metrics::{ChannelMetrics, TrafficDirection};
+use crate::metrics::{PinMetrics, TrafficDirection};
 
 const HEADER_LIMIT: usize = 64 * 1024;
 
-#[derive(Debug, Clone, Copy)]
-pub enum MeterProtocol {
-    Http,
-    Socks5,
-}
-
-pub async fn start_meter_proxy(
-    channel_name: String,
-    protocol: MeterProtocol,
+pub async fn start_mixed_meter_proxy(
+    node_name: String,
     listen_port: u16,
-    upstream_port: u16,
-    metrics: Arc<Mutex<ChannelMetrics>>,
+    http_upstream_port: u16,
+    socks_upstream_port: u16,
+    metrics: Arc<Mutex<PinMetrics>>,
 ) -> Result<JoinHandle<()>> {
     let listener = TcpListener::bind(("127.0.0.1", listen_port))
         .await
@@ -30,45 +24,73 @@ pub async fn start_meter_proxy(
     Ok(tokio::spawn(async move {
         if let Err(err) = accept_loop(
             listener,
-            channel_name.clone(),
-            protocol,
-            upstream_port,
+            node_name.clone(),
+            http_upstream_port,
+            socks_upstream_port,
             metrics,
         )
         .await
         {
-            eprintln!("计量代理 {channel_name} 已停止：{err:#}");
+            eprintln!("混合计量代理 {node_name} 已停止：{err:#}");
         }
     }))
 }
 
 async fn accept_loop(
     listener: TcpListener,
-    channel_name: String,
-    protocol: MeterProtocol,
-    upstream_port: u16,
-    metrics: Arc<Mutex<ChannelMetrics>>,
+    node_name: String,
+    http_upstream_port: u16,
+    socks_upstream_port: u16,
+    metrics: Arc<Mutex<PinMetrics>>,
 ) -> Result<()> {
     loop {
         let (client, _) = listener.accept().await?;
         let metrics = metrics.clone();
-        let channel_name = channel_name.clone();
+        let node_name = node_name.clone();
         tokio::spawn(async move {
-            let result = match protocol {
-                MeterProtocol::Http => handle_http_client(client, upstream_port, metrics).await,
-                MeterProtocol::Socks5 => handle_socks5_client(client, upstream_port, metrics).await,
+            let result = match detect_protocol(&client).await {
+                Ok(DetectedProtocol::Socks5) => {
+                    handle_socks5_client(client, socks_upstream_port, metrics).await
+                }
+                Ok(DetectedProtocol::Http) => {
+                    handle_http_client(client, http_upstream_port, metrics).await
+                }
+                Err(err) => Err(err),
             };
             if let Err(err) = result {
-                eprintln!("meter proxy for {channel_name} failed: {err:#}");
+                eprintln!("mixed meter proxy for {node_name} failed: {err:#}");
             }
         });
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DetectedProtocol {
+    Http,
+    Socks5,
+}
+
+async fn detect_protocol(client: &TcpStream) -> Result<DetectedProtocol> {
+    let mut first = [0_u8; 1];
+    let bytes = client.peek(&mut first).await?;
+    if bytes == 0 {
+        bail!("客户端在发送代理请求前已断开");
+    }
+    Ok(protocol_from_first_byte(first[0]))
+}
+
+fn protocol_from_first_byte(byte: u8) -> DetectedProtocol {
+    if byte == 0x05 {
+        DetectedProtocol::Socks5
+    } else {
+        DetectedProtocol::Http
     }
 }
 
 async fn handle_http_client(
     mut client: TcpStream,
     upstream_port: u16,
-    metrics: Arc<Mutex<ChannelMetrics>>,
+    metrics: Arc<Mutex<PinMetrics>>,
 ) -> Result<()> {
     let mut first_packet = Vec::new();
     let request = read_http_initial_request(&mut client, &mut first_packet).await?;
@@ -91,7 +113,7 @@ async fn handle_http_client(
 async fn handle_socks5_client(
     mut client: TcpStream,
     upstream_port: u16,
-    metrics: Arc<Mutex<ChannelMetrics>>,
+    metrics: Arc<Mutex<PinMetrics>>,
 ) -> Result<()> {
     let mut upstream = TcpStream::connect(("127.0.0.1", upstream_port))
         .await
@@ -129,7 +151,7 @@ async fn handle_socks5_client(
 async fn relay_streams(
     client: TcpStream,
     upstream: TcpStream,
-    metrics: Arc<Mutex<ChannelMetrics>>,
+    metrics: Arc<Mutex<PinMetrics>>,
     connection_id: String,
 ) -> Result<()> {
     let (mut client_reader, mut client_writer) = client.into_split();
@@ -171,7 +193,7 @@ async fn relay_streams(
 async fn copy_metered<R, W>(
     reader: &mut R,
     writer: &mut W,
-    metrics: Arc<Mutex<ChannelMetrics>>,
+    metrics: Arc<Mutex<PinMetrics>>,
     connection_id: String,
     direction: TrafficDirection,
 ) -> Result<()>
@@ -418,6 +440,13 @@ mod tests {
         ])
         .unwrap();
         assert_eq!(request, "2001:db8::1:80");
+    }
+
+    #[test]
+    fn detects_mixed_proxy_protocol() {
+        assert_eq!(protocol_from_first_byte(0x05), DetectedProtocol::Socks5);
+        assert_eq!(protocol_from_first_byte(b'C'), DetectedProtocol::Http);
+        assert_eq!(protocol_from_first_byte(b'G'), DetectedProtocol::Http);
     }
 
     fn parse_socks5_connect_target(raw: &[u8]) -> Result<String> {
