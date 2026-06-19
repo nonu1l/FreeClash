@@ -187,10 +187,17 @@ onBeforeUnmount(() => {
       >
         <div class="node-card-top">
           <h2 :title="node.name">{{ node.name }}</h2>
-          <div class="node-metrics">
-            <span title="上行速度"><ArrowUp :size="15" />{{ formatSpeed(pinsByNode.get(node.name)?.stats.upload_speed ?? 0) }}</span>
-            <span title="下行速度"><ArrowDown :size="15" />{{ formatSpeed(pinsByNode.get(node.name)?.stats.download_speed ?? 0) }}</span>
-            <span title="总流量"><Database :size="15" />{{ formatBytes((pinsByNode.get(node.name)?.stats.upload_total ?? 0) + (pinsByNode.get(node.name)?.stats.download_total ?? 0)) }}</span>
+          <div class="node-card-tools">
+            <button
+              type="button"
+              class="delay-button"
+              :disabled="busy === `delay-${node.name}`"
+              title="重新测试此节点延迟"
+              @click="testDelay(node.name)"
+            >
+              <Gauge :size="15" />
+              <span>{{ delayFor(node) === null ? "延迟" : `${delayFor(node)} ms` }}</span>
+            </button>
             <button
               type="button"
               class="icon-pin"
@@ -218,16 +225,11 @@ onBeforeUnmount(() => {
             <span>SOCKS5</span>
             <strong>{{ pinsByNode.get(node.name)?.port ?? "未分配" }}</strong>
           </button>
-          <button
-            type="button"
-            class="delay-button"
-            :disabled="busy === `delay-${node.name}`"
-            title="重新测试此节点延迟"
-            @click="testDelay(node.name)"
-          >
-            <Gauge :size="15" />
-            <span>{{ delayFor(node) === null ? "延迟" : `${delayFor(node)} ms` }}</span>
-          </button>
+          <div class="node-metrics">
+            <span title="上行速度"><ArrowUp :size="15" />{{ formatSpeed(pinsByNode.get(node.name)?.stats.upload_speed ?? 0) }}</span>
+            <span title="下行速度"><ArrowDown :size="15" />{{ formatSpeed(pinsByNode.get(node.name)?.stats.download_speed ?? 0) }}</span>
+            <span title="总流量"><Database :size="15" />{{ formatBytes((pinsByNode.get(node.name)?.stats.upload_total ?? 0) + (pinsByNode.get(node.name)?.stats.download_total ?? 0)) }}</span>
+          </div>
         </div>
 
         <p v-if="pinsByNode.get(node.name)?.port_error" class="port-error">

@@ -58,7 +58,7 @@ button:disabled {
   height: 100%;
   overflow: auto;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
   align-content: start;
   gap: 12px;
   padding-right: 2px;
@@ -122,6 +122,7 @@ button:disabled {
 }
 
 .node-metrics,
+.node-card-tools,
 .toolbar-metrics,
 .toolbar-actions {
   display: flex;
@@ -129,8 +130,13 @@ button:disabled {
   gap: 8px;
 }
 
-.node-metrics {
+.node-metrics,
+.node-card-tools {
   flex-shrink: 0;
+}
+
+.node-card-bottom .node-metrics {
+  justify-content: flex-end;
 }
 
 .node-metrics span,
@@ -433,6 +439,7 @@ button:disabled {
   }
 
   .node-metrics,
+  .node-card-tools,
   .toolbar-metrics,
   .toolbar-actions {
     width: 100%;
